@@ -1,5 +1,6 @@
 from api.db import cases as case_repo
 from api.db.audit import audit_log
+from api.voice.twilio_client import build_outbound_twiml, get_twilio_client
 
 
 class SignoffNotApprovedError(RuntimeError):
@@ -33,15 +34,21 @@ def place_patient_call(
             pass
         raise SignoffNotApprovedError(case_id, status)
 
+    import os
+    from_number = os.environ.get("TWILIO_PHONE_NUMBER")
+    twiml = build_outbound_twiml(case_id)
+    twilio_call = get_twilio_client().calls.create(
+        to=phone, from_=from_number, twiml=twiml
+    )
+
     audit_log(
         case_id,
         actor="voice.place_patient_call",
         action="call_started",
-        details={"language": language, "phone_last4": phone[-4:]},
+        details={
+            "language": language,
+            "phone_last4": phone[-4:],
+            "call_sid": twilio_call.sid,
+        },
     )
-
-    # TODO(deepgram-bridge): wire the Deepgram Voice Agent here once we confirm
-    # whether Voice Agent accepts Claude as its LLM directly. If not, fall back
-    # to Deepgram STT+TTS + Claude in our own loop. Until then this is a stub —
-    # do NOT remove the gate above; downstream wiring depends on it.
-    return {"call_sid": "stub-call-sid", "status": "pending_bridge"}
+    return {"call_sid": twilio_call.sid, "status": "dialing"}
