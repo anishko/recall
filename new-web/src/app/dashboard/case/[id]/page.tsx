@@ -1,0 +1,332 @@
+"use client";
+import { use, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AnimatePresence, motion } from "framer-motion";
+import { ArrowLeft, Clock, User, Globe, AlertTriangle, CheckCircle, ExternalLink } from "lucide-react";
+import Link from "next/link";
+import { useDashboard } from "@/store/useDashboard";
+import { SliceCarousel } from "@/components/SliceCarousel";
+import { ReportPanel } from "@/components/ReportPanel";
+import { ApprovePanel } from "@/components/ApprovePanel";
+import { LiveCallStrip } from "@/components/LiveCallStrip";
+import { UrgencyBadge } from "@/components/UrgencyBadge";
+import { ConfidenceBar } from "@/components/ConfidenceBar";
+import { ThemeToggle } from "@/components/ThemeToggle";
+
+const LANG_LABELS: Record<string, string> = {
+  en: "English", "ar-TN": "Tunisian Arabic", fr: "French", zh: "Chinese"
+};
+
+function timeAgo(iso: string) {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
+}
+
+export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
+  const router = useRouter();
+  const { cases, approveCase, flagCase } = useDashboard();
+  const c = cases.find((c) => c.id === id);
+  const [showCallStrip, setShowCallStrip] = useState(false);
+  const [activeTab, setActiveTab] = useState<"imaging" | "report" | "patient">("imaging");
+
+  if (!c) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-center p-12">
+        <p style={{ color: "var(--color-muted)" }}>Case not found.</p>
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="mt-4 text-sm hover:underline"
+          style={{ color: "var(--color-primary)" }}
+        >
+          ← Back to queue
+        </button>
+      </div>
+    );
+  }
+
+  function handleApprove() {
+    if (!c) return;
+    approveCase(c.id);
+    setShowCallStrip(true);
+  }
+
+  function handleFlag(note: string) {
+    if (!c) return;
+    flagCase(c.id);
+    console.log("Flagged with note:", note);
+  }
+
+  const isHighRisk = c.confidence < 0.85 || c.urgency === "URGENT";
+
+  return (
+    <div className="relative min-h-full" style={{ background: "var(--color-bg)" }}>
+      {/* Top bar */}
+      <div
+        className="sticky top-0 z-20 flex items-center gap-3 px-6 py-3"
+        style={{
+          background: "color-mix(in oklch, var(--color-surface) 90%, transparent)",
+          backdropFilter: "blur(8px)",
+          borderBottom: "1px solid var(--color-border)",
+        }}
+      >
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="flex items-center gap-1.5 text-sm transition-colors"
+          style={{ color: "var(--color-muted)" }}
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to queue
+        </button>
+        <span style={{ color: "var(--color-border)" }}>/</span>
+        <span className="text-sm font-semibold font-mono" style={{ color: "var(--color-text)" }}>{c.id}</span>
+        <span style={{ color: "var(--color-muted)" }}>·</span>
+        <span className="text-sm" style={{ color: "var(--color-muted)" }}>{c.patientName}</span>
+        <UrgencyBadge tier={c.urgency} size="sm" className="ml-1" />
+        <div className="ml-auto flex items-center gap-2">
+          <span className="text-xs" style={{ color: "var(--color-muted-2)" }}>
+            Arrived {timeAgo(c.arrivedAt)}
+          </span>
+          <ThemeToggle />
+        </div>
+      </div>
+
+      {/* Risk banner for high-risk or low-confidence */}
+      {isHighRisk && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="flex items-center gap-3 px-6 py-2.5 text-xs font-medium"
+          style={{
+            background: c.urgency === "URGENT" ? "var(--color-urgent-bg)" : "var(--color-short-bg)",
+            borderBottom: `1px solid color-mix(in oklch, ${c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)"} 30%, transparent)`,
+          }}
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)" }} />
+          <span style={{ color: c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)" }}>
+            {c.urgency === "URGENT"
+              ? `URGENT — Lung-RADS 4B. Requires PET-CT + pulmonology referral within ${c.recommendedTimeframe}.`
+              : `Confidence below threshold (${Math.round(c.confidence * 100)}%). Human review required before approval.`}
+          </span>
+        </motion.div>
+      )}
+
+      {/* Main grid */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-0 min-h-[calc(100vh-120px)]">
+
+        {/* Left column */}
+        <div className="border-r" style={{ borderColor: "var(--color-border)" }}>
+          {/* Tab bar */}
+          <div className="flex border-b px-6" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+            {(["imaging", "report", "patient"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors capitalize"
+                style={{
+                  borderColor: activeTab === tab ? "var(--color-primary)" : "transparent",
+                  color: activeTab === tab ? "var(--color-primary)" : "var(--color-muted)",
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-6">
+            {activeTab === "imaging" && (
+              <div className="space-y-4 max-w-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--color-muted)" }}>
+                      CT Chest · Axial lung window
+                    </p>
+                    <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
+                      {c.slices.length} slices · Source: Radiopaedia T2A-Lung-Cancer
+                    </p>
+                  </div>
+                  <a
+                    href="https://radiopaedia.org/cases/t2a-lung-cancer"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs flex items-center gap-1 hover:underline"
+                    style={{ color: "var(--color-primary)" }}
+                  >
+                    Source <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+                <SliceCarousel slices={c.slices} highlight={c.highlight} />
+                {/* Lung-RADS legend */}
+                <div
+                  className="rounded-xl p-3 space-y-2"
+                  style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                    Lung-RADS v2022 classification
+                  </p>
+                  <div className="grid grid-cols-4 gap-1 text-center">
+                    {[
+                      { cat: "1", label: "Negative", color: "var(--color-success)" },
+                      { cat: "2", label: "Benign", color: "var(--color-routine)" },
+                      { cat: "3", label: "Probably benign", color: "var(--color-short)" },
+                      { cat: "4B", label: "Suspicious", color: "var(--color-urgent)", active: true },
+                    ].map(({ cat, label, color, active }) => (
+                      <div
+                        key={cat}
+                        className="rounded-lg p-1.5 space-y-0.5"
+                        style={{
+                          background: active ? `color-mix(in oklch, ${color} 12%, transparent)` : "transparent",
+                          border: active ? `1px solid color-mix(in oklch, ${color} 30%, transparent)` : "1px solid var(--color-border)",
+                        }}
+                      >
+                        <p className="text-xs font-bold" style={{ color }}>{cat}</p>
+                        <p className="text-[9px] leading-tight" style={{ color: active ? color : "var(--color-muted-2)" }}>{label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "report" && (
+              <div className="max-w-2xl space-y-4">
+                {/* Findings summary */}
+                <div
+                  className="rounded-xl p-4 space-y-3"
+                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                    AI Findings Summary
+                  </p>
+                  <div className="space-y-2">
+                    {[
+                      { key: "Finding", val: c.finding, icon: AlertTriangle, color: "var(--color-urgent)" },
+                      { key: "Guideline", val: c.guideline, icon: CheckCircle, color: "var(--color-routine)" },
+                      { key: "Timeframe", val: c.recommendedTimeframe, icon: Clock, color: "var(--color-primary)" },
+                    ].map(({ key, val, icon: Icon, color }) => (
+                      <div key={key} className="flex items-start gap-2.5">
+                        <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color }} />
+                        <div>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide mr-1.5" style={{ color: "var(--color-muted)" }}>{key}</span>
+                          <span className="text-xs" style={{ color: "var(--color-text)" }}>{val}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <ReportPanel report={c.reportRaw} entities={c.entities} />
+              </div>
+            )}
+
+            {activeTab === "patient" && (
+              <div className="max-w-xl space-y-4">
+                {/* Patient demographics */}
+                <div
+                  className="rounded-xl p-4 space-y-4"
+                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                    Patient profile
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <div
+                      className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+                      style={{ background: "var(--color-routine-bg)", color: "var(--color-routine)" }}
+                    >
+                      {c.patientInitials}
+                    </div>
+                    <div>
+                      <p className="font-semibold" style={{ color: "var(--color-text)" }}>{c.patientName}</p>
+                      <p className="text-xs" style={{ color: "var(--color-muted)" }}>
+                        {c.patientAge} years old · {LANG_LABELS[c.patientLanguage] ?? "English"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { icon: User, label: "Age", val: `${c.patientAge}y` },
+                      { icon: Globe, label: "Language", val: LANG_LABELS[c.patientLanguage] ?? "English" },
+                      { icon: Clock, label: "Case age", val: timeAgo(c.arrivedAt) },
+                      { icon: CheckCircle, label: "Status", val: c.status.charAt(0).toUpperCase() + c.status.slice(1) },
+                    ].map(({ icon: Icon, label, val }) => (
+                      <div
+                        key={label}
+                        className="rounded-lg p-2.5"
+                        style={{ background: "var(--color-surface-2)" }}
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <Icon className="h-3 w-3" style={{ color: "var(--color-muted)" }} />
+                          <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>{label}</p>
+                        </div>
+                        <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>{val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Patient portal preview */}
+                <div
+                  className="rounded-xl p-4 space-y-3"
+                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                    Patient portal link
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: "var(--color-text)" }}>
+                    The patient will receive this link after approval. It shows a plain-language explanation in their language with appointment scheduling.
+                  </p>
+                  <Link
+                    href="/p/tok_sarah_abc123"
+                    target="_blank"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline"
+                    style={{ color: "var(--color-primary)" }}
+                  >
+                    Preview patient portal <ExternalLink className="h-3 w-3" />
+                  </Link>
+                </div>
+
+                {/* Confidence breakdown */}
+                <div
+                  className="rounded-xl p-4 space-y-3"
+                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                >
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                    AI confidence breakdown
+                  </p>
+                  <ConfidenceBar value={c.confidence} />
+                  <div className="space-y-2">
+                    {Object.entries(c.subScores).map(([k, v]) => (
+                      <div key={k} className="flex items-center gap-3">
+                        <span className="text-xs w-24 capitalize shrink-0" style={{ color: "var(--color-muted)" }}>
+                          {k.replace(/([A-Z])/g, " $1")}
+                        </span>
+                        <div className="flex-1">
+                          <ConfidenceBar value={v} showLabel />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right column — sticky actions */}
+        <div className="p-6" style={{ background: "var(--color-surface)" }}>
+          <div className="sticky top-20">
+            <ApprovePanel case_={c} onApprove={handleApprove} onFlag={handleFlag} />
+          </div>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showCallStrip && (
+          <LiveCallStrip case_={c} onClose={() => setShowCallStrip(false)} />
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

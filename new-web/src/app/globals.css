@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+/* ── Light theme (default) ─────────────────────────────────── */
+:root,
+[data-theme="light"] {
+  --color-bg:        oklch(0.99 0.005 250);
+  --color-surface:   #ffffff;
+  --color-surface-2: oklch(0.96 0.004 250);
+  --color-border:    oklch(0.91 0.006 250);
+  --color-text:      oklch(0.18 0.02 250);
+  --color-muted:     oklch(0.48 0.02 250);
+  --color-muted-2:   oklch(0.65 0.01 250);
+
+  --color-primary:       oklch(0.52 0.18 250);
+  --color-primary-hover: oklch(0.45 0.18 250);
+  --color-primary-fg:    #ffffff;
+
+  --color-urgent:    oklch(0.60 0.21 25);
+  --color-urgent-bg: oklch(0.97 0.02 25);
+  --color-short:     oklch(0.68 0.15 70);
+  --color-short-bg:  oklch(0.98 0.02 70);
+  --color-routine:   oklch(0.52 0.14 230);
+  --color-routine-bg:oklch(0.97 0.02 230);
+  --color-nofu:      oklch(0.55 0.02 250);
+  --color-nofu-bg:   oklch(0.96 0.005 250);
+  --color-success:   oklch(0.58 0.17 145);
+  --color-success-bg:oklch(0.96 0.03 145);
+
+  --color-annotation:    oklch(0.82 0.16 70);
+  --color-annotation-bg: oklch(0.82 0.16 70 / 0.10);
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+}
+
+/* ── Dark theme ────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --color-bg:        oklch(0.11 0.01 250);
+  --color-surface:   oklch(0.15 0.01 250);
+  --color-surface-2: oklch(0.19 0.01 250);
+  --color-border:    oklch(0.25 0.01 250);
+  --color-text:      oklch(0.95 0.005 250);
+  --color-muted:     oklch(0.65 0.01 250);
+  --color-muted-2:   oklch(0.45 0.01 250);
+
+  --color-primary:       oklch(0.62 0.18 250);
+  --color-primary-hover: oklch(0.70 0.18 250);
+  --color-primary-fg:    #ffffff;
+
+  --color-urgent:    oklch(0.70 0.18 25);
+  --color-urgent-bg: oklch(0.18 0.05 25);
+  --color-short:     oklch(0.78 0.13 70);
+  --color-short-bg:  oklch(0.18 0.04 70);
+  --color-routine:   oklch(0.68 0.13 230);
+  --color-routine-bg:oklch(0.16 0.04 230);
+  --color-nofu:      oklch(0.65 0.01 250);
+  --color-nofu-bg:   oklch(0.20 0.005 250);
+  --color-success:   oklch(0.70 0.15 145);
+  --color-success-bg:oklch(0.16 0.05 145);
+
+  --color-annotation:    oklch(0.85 0.18 70);
+  --color-annotation-bg: oklch(0.85 0.18 70 / 0.12);
+
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md:   0 4px 12px rgba(0,0,0,0.5), 0 2px 4px rgba(0,0,0,0.3);
+}
+
+/* ── Tailwind theme bridge ─────────────────────────────────── */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+body { min-height: 100dvh; background: var(--color-bg); }
+
+/* ── RTL ───────────────────────────────────────────────────── */
+[dir="rtl"] {
+  font-family: "IBM Plex Sans Arabic", var(--font-geist-sans, sans-serif);
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 99px;
+}
+
+/* ── Focus ring ────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* ── Skip link ─────────────────────────────────────────────── */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  background: var(--color-primary);
+  color: white;
+  padding: 0.5rem 1rem;
+  border-radius: 0 0 8px 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  z-index: 9999;
+  text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
+/* ── Semantic utility classes ──────────────────────────────── */
+.card-surface {
+  background: var(--color-surface);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  border: 1px solid var(--color-border);
+}
+
+.text-primary  { color: var(--color-text); }
+.text-muted    { color: var(--color-muted); }
+.bg-surface    { background: var(--color-surface); }
+.bg-surface-2  { background: var(--color-surface-2); }
+.border-base   { border-color: var(--color-border); }
+
+/* ── Urgency highlight pulse ───────────────────────────────── */
+@keyframes highlight-pulse {
+  0%, 100% { background-color: transparent; }
+  25%       { background-color: color-mix(in oklch, var(--color-primary) 8%, transparent); }
+}
+.row-new { animation: highlight-pulse 0.7s ease; }
+
+/* ── Scan zoom overlay ─────────────────────────────────────── */
+.scan-container { cursor: zoom-in; }
+.scan-container:fullscreen { cursor: default; background: black; }
+.scan-container:-webkit-full-screen { cursor: default; background: black; }
