@@ -9,19 +9,42 @@ interface NextStepsTimelineProps {
   heading: string;
   bookLabel: string;
   onBook?: () => void;
+  variant?: "default" | "landing";
   className?: string;
 }
 
-export function NextStepsTimeline({ steps, heading, bookLabel, onBook, className }: NextStepsTimelineProps) {
+export function NextStepsTimeline({
+  steps,
+  heading,
+  bookLabel,
+  onBook,
+  variant = "default",
+  className,
+}: NextStepsTimelineProps) {
+  const isLanding = variant === "landing";
+
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30, delay: 0.24 }}
-      className={cn("card-surface p-6 space-y-4", className)}
+      className={cn(
+        isLanding
+          ? "landing-panel rounded-2xl p-5 sm:p-6 space-y-4"
+          : "card-surface p-6 space-y-4",
+        className,
+      )}
       aria-labelledby="steps-heading"
     >
-      <h2 id="steps-heading" className="text-lg font-semibold" style={{ color: "var(--color-text)" }}>
+      <h2
+        id="steps-heading"
+        className={cn(
+          isLanding
+            ? "font-display text-2xl sm:text-[1.65rem] leading-tight"
+            : "text-lg font-semibold",
+        )}
+        style={{ color: "var(--color-text)" }}
+      >
         {heading}
       </h2>
       <ol className="space-y-4">
@@ -64,8 +87,11 @@ export function NextStepsTimeline({ steps, heading, bookLabel, onBook, className
               {step.active && onBook && (
                 <button
                   onClick={onBook}
-                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors"
-                  style={{ background: "var(--color-primary)" }}
+                  className={cn(
+                    "mt-2.5 inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-colors font-sans",
+                    isLanding && "btn-accent !rounded-xl",
+                  )}
+                  style={isLanding ? undefined : { background: "var(--color-primary)" }}
                 >
                   {bookLabel} →
                 </button>

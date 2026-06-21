@@ -1,5 +1,5 @@
 "use client";
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -7,9 +7,20 @@ interface SliceCarouselProps {
   slices: string[];
   className?: string;
   showControls?: boolean;
+  /** Clinical = zoom/fullscreen; patient = swipe-friendly, simpler chrome */
+  mode?: "clinical" | "patient";
+  overlay?: ReactNode;
 }
 
-export function SliceCarousel({ slices, className, showControls = true }: SliceCarouselProps) {
+export function SliceCarousel({
+  slices,
+  className,
+  showControls,
+  mode = "clinical",
+  overlay,
+}: SliceCarouselProps) {
+  const isPatient = mode === "patient";
+  const controlsVisible = showControls ?? !isPatient;
   const [index, setIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -17,6 +28,7 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
   const [isPanning, setIsPanning] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
+  const touchStartX = useRef<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const prev = useCallback(() => {
@@ -54,10 +66,24 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
   const handleMouseUp = () => setIsPanning(false);
 
   const handleWheel = (e: React.WheelEvent) => {
+    if (isPatient) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.15 : 0.15;
     setZoom((z) => Math.max(1, Math.min(z + delta, 4)));
     if (e.deltaY > 0) { setPanX(0); setPanY(0); }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (zoom > 1) return;
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || zoom > 1) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    if (dx > 48) prev();
+    else if (dx < -48) next();
+    touchStartX.current = null;
   };
 
   const imageStyle = {
@@ -90,6 +116,8 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -108,8 +136,10 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
 
         </div>
 
+        {overlay}
+
         {/* Top-right controls */}
-        {showControls && (
+        {controlsVisible && (
           <div className="absolute top-2 right-2 flex gap-1.5">
             <ControlButton onClick={() => setZoom((z) => Math.min(z + 0.5, 4))} title="Zoom in">
               <ZoomIn className="h-3.5 w-3.5" />
@@ -127,9 +157,9 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
         )}
 
         {/* Bottom info bar */}
-        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-1.5 bg-gradient-to-t from-black/70 to-transparent">
+        <div className="absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-1.5 bg-gradient-to-t from-black/70 to-transparent pointer-events-none">
           <span className="text-[10px] font-mono text-white/70 uppercase tracking-wider">
-            CT · Axial
+            {isPatient ? "CT · Patient view" : "CT · Axial"}
           </span>
           <span className="text-[10px] font-mono text-white/70">
             {index + 1}/{slices.length}
@@ -187,9 +217,16 @@ export function SliceCarousel({ slices, className, showControls = true }: SliceC
       )}
 
       {/* Keyboard hint */}
-      <p className="text-[10px] text-[var(--color-muted-2)] text-center">
-        ← → to navigate · scroll to zoom · drag when zoomed
-      </p>
+      {!isPatient && (
+        <p className="text-[10px] text-[var(--color-muted-2)] text-center">
+          ← → to navigate · scroll to zoom · drag when zoomed
+        </p>
+      )}
+      {isPatient && slices.length > 1 && (
+        <p className="text-[10px] text-[var(--color-muted-2)] text-center font-sans">
+          Swipe left or right · tap dots to jump between slices
+        </p>
+      )}
     </div>
   );
 }

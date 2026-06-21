@@ -61,6 +61,8 @@ export interface PatientView {
   urgency: UrgencyTier;
   recommendedTimeframe: string;
   sliceUrl: string;
+  /** Multiple scan slices — swipe in carousel; falls back to [sliceUrl] */
+  slices?: string[];
   highlight?: { x: number; y: number; r: number };
   explanation: Record<Locale, PatientExplanation>;
   doctorName: string;

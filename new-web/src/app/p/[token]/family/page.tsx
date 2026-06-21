@@ -157,7 +157,7 @@ export default function FamilyPage({
               Next step
             </p>
             <p className="text-sm" style={{ color: "var(--color-text)" }}>
-              {view.recommendedTimeframe} · {view.doctorName}
+              {view.recommendedTimeframe}
             </p>
           </div>
         </motion.div>

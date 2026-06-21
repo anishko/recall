@@ -338,9 +338,10 @@ export function buildPatientViewFromApi(
     urgency,
     recommendedTimeframe:
       timeframeDays > 0 ? `${timeframeDays} days` : "See your doctor",
-    sliceUrl: DEMO_SLICES[0], // MOCK
+    sliceUrl: DEMO_SLICES[0],
+    slices: DEMO_SLICES,
     highlight: undefined, // MOCK
-    doctorName: "Your doctor",
+    doctorName: "",
     calledAt: new Date().toISOString(),
     isScheduled: Boolean(apiResp.booked),
     scheduledFor: (apiResp.booked_slot as string) ?? undefined,
