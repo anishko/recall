@@ -62,11 +62,21 @@ _GREETING_BY_LANG = {
 }
 
 
+def _sanitize_script(text: str) -> str:
+    """Older drafts said RadRelay; voice brand is Recall."""
+    return (
+        text.replace("Rad Relay", "Recall")
+        .replace("RadRelay", "Recall")
+        .replace("radrelay", "Recall")
+    )
+
+
 def _system_prompt(case: CaseContext) -> str:
     lang_name = _LANG_NAME_BY_CODE.get(case.patient_language, "English")
     return (
         "You are Recall, a friendly assistant calling a patient on behalf of "
-        "their radiologist. This is decision support only — never give a "
+        "their radiologist. Your name is Recall — never say RadRelay or Rad Relay. "
+        "This is decision support only — never give a "
         "diagnosis, never speculate beyond the script, never discuss treatment. "
         "If the patient asks medical questions you cannot answer from the "
         "script, tell them their radiologist will follow up.\n\n"
@@ -80,7 +90,7 @@ def _system_prompt(case: CaseContext) -> str:
         "exact slot string. If they decline, say the office will call back and "
         "end politely.\n\n"
         "Script from the radiologist (paraphrase warmly, stay faithful, stay brief):\n"
-        f"{case.patient_script}"
+        f"{_sanitize_script(case.patient_script)}"
     )
 
 
