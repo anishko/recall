@@ -3,7 +3,7 @@
 Cal Hacks AI 2026 (UC Berkeley), 24hr build. Read this fully before writing code.
 
 ## What this is
-Email a radiology report PDF to a RadRelay inbox. Claude parses it, applies the right
+Email a radiology report PDF to a Recall inbox. Claude parses it, applies the right
 clinical follow-up guideline, drafts a patient phone script in the patient's language,
 gets the radiologist to approve via email, then places a multilingual outbound call that
 books the follow-up scan. Closes the "actionable finding never followed up" gap.
