@@ -20,7 +20,13 @@ CREATE TABLE cases (
   call_outcome TEXT,
   call_transcript TEXT,
   followup_booked_slot TEXT,      -- mocked synthetic slot in v1
-  cost_usd NUMERIC(10,4)
+  cost_usd NUMERIC(10,4),
+  patient_summary TEXT,           -- plain-language blurb for patient portal
+  risk_tier TEXT,                 -- routine|low|moderate|high|critical
+  contact_cadence_hours INTEGER,  -- follow-up / retry interval
+  next_contact_at TIMESTAMPTZ,
+  call_attempts INTEGER DEFAULT 0,
+  family_contact_phone TEXT
 );
 
 CREATE TABLE audit_log (
