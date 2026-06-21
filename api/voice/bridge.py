@@ -226,6 +226,27 @@ async def run_bridge(twilio_ws, case_loader, on_finish) -> BridgeState:
     dg_ws = None
     settings_sent = False
 
+    async def dg_keepalive() -> None:
+        """Hold the Deepgram WS open during conversational pauses.
+
+        Deepgram times out the agent socket at ~10s of inbound silence. While
+        the patient is thinking or the agent is speaking, Twilio may not send
+        media frames for several seconds, so we ping every 5s. The KeepAlive
+        message is documented as a no-op when audio is also flowing.
+        """
+        while not state.stopped:
+            try:
+                await asyncio.sleep(5)
+            except asyncio.CancelledError:
+                return
+            if dg_ws is None or state.stopped:
+                return
+            try:
+                await dg_ws.send(json.dumps({"type": "KeepAlive"}))
+            except Exception:
+                log.debug("keepalive send failed; deepgram WS likely closed")
+                return
+
     async def tw_to_dg() -> None:
         nonlocal dg_ws, settings_sent
         while True:
@@ -257,6 +278,8 @@ async def run_bridge(twilio_ws, case_loader, on_finish) -> BridgeState:
                     )
                     settings_sent = True
                     asyncio.create_task(dg_pump())
+                    asyncio.create_task(dg_keepalive())
+                    log.info("deepgram keepalive task started (5s interval)")
                 except Exception:
                     log.exception("failed to start Deepgram agent")
                     state.stopped = True

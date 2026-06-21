@@ -116,6 +116,11 @@ def build_settings(case: CaseContext) -> dict:
                 "provider": {
                     "type": "deepgram",
                     "model": _LISTEN_MODEL_BY_LANG.get(lang, "nova-3"),
+                    # Pin the STT language explicitly. nova-2 (used for fr/vi)
+                    # defaults to English without this — transcribing French
+                    # audio as word-salad English. Deepgram's docs are clear:
+                    # agent.language does NOT propagate to listen.provider.
+                    "language": lang,
                 }
             },
             "think": {
