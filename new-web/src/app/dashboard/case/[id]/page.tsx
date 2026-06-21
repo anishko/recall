@@ -21,7 +21,9 @@ import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
 import { MockBadge } from "@/components/MockBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { ClinicalEvaluationDashboard } from "@/components/ClinicalEvaluationDashboard";
 import type { Case } from "@/lib/types";
+import type { ClinicalEvaluationData } from "@/lib/clinicalEvaluation";
 
 const LANG_LABELS: Record<string, string> = {
   en: "English",
@@ -51,7 +53,21 @@ export default function CaseDetailPage({
 
   // If case not in store (direct URL navigation), fetch it individually
   const [fetchedCase, setFetchedCase] = useState<Case | null>(null);
+  const [evaluation, setEvaluation] = useState<ClinicalEvaluationData | null>(
+    null,
+  );
   const [fetchLoading, setFetchLoading] = useState(false);
+
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem(`recall_eval_${id}`);
+      if (cached) {
+        setEvaluation(JSON.parse(cached) as ClinicalEvaluationData);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
 
   useEffect(() => {
     if (storeCase || fetchedCase || fetchLoading) return;
@@ -59,20 +75,57 @@ export default function CaseDetailPage({
     fetch(`/api/cases/${id}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (data && !data.error) setFetchedCase(data as Case);
+        if (data && !data.error) {
+          const { evaluation: evalData, ...caseFields } = data as Case & {
+            evaluation?: ClinicalEvaluationData;
+          };
+          setFetchedCase(caseFields as Case);
+          if (evalData) setEvaluation(evalData);
+        }
       })
       .catch(() => {})
       .finally(() => setFetchLoading(false));
   }, [id, storeCase, fetchedCase, fetchLoading]);
+
+  useEffect(() => {
+    if (evaluation || !storeCase) return;
+    fetch(`/api/cases/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.evaluation) setEvaluation(data.evaluation as ClinicalEvaluationData);
+      })
+      .catch(() => {});
+  }, [id, storeCase, evaluation]);
 
   const c = storeCase ?? fetchedCase;
 
   // Trigger LiveCallStrip if landing from email ?approved=1
   const initiallyApproved = searchParams.get("approved") === "1";
   const [showCallStrip, setShowCallStrip] = useState(initiallyApproved);
-  const [activeTab, setActiveTab] = useState<"imaging" | "report" | "patient">(
-    "imaging",
-  );
+
+  type DetailTab = "evaluation" | "imaging" | "report" | "patient";
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<DetailTab>(() => {
+    if (
+      tabFromUrl === "imaging" ||
+      tabFromUrl === "report" ||
+      tabFromUrl === "patient"
+    ) {
+      return tabFromUrl;
+    }
+    return "evaluation";
+  });
+
+  useEffect(() => {
+    if (
+      tabFromUrl === "evaluation" ||
+      tabFromUrl === "imaging" ||
+      tabFromUrl === "report" ||
+      tabFromUrl === "patient"
+    ) {
+      setActiveTab(tabFromUrl);
+    }
+  }, [tabFromUrl]);
 
   if (fetchLoading && !c) {
     return (
@@ -213,7 +266,7 @@ export default function CaseDetailPage({
               background: "var(--color-surface)",
             }}
           >
-            {(["imaging", "report", "patient"] as const).map((tab) => (
+            {(["evaluation", "imaging", "report", "patient"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -235,6 +288,18 @@ export default function CaseDetailPage({
           </div>
 
           <div className="p-6">
+            {activeTab === "evaluation" && evaluation && (
+              <ClinicalEvaluationDashboard data={evaluation} className="max-w-3xl" />
+            )}
+            {activeTab === "evaluation" && !evaluation && (
+              <div className="flex items-center justify-center py-16">
+                <div
+                  className="h-8 w-8 rounded-full border-2 border-t-transparent animate-spin"
+                  style={{ borderColor: "var(--color-primary)" }}
+                />
+              </div>
+            )}
+
             {activeTab === "imaging" && (
               <div className="space-y-4 max-w-xl">
                 <div className="flex items-center justify-between">

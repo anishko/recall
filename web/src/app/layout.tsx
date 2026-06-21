@@ -25,6 +25,10 @@ export const metadata: Metadata = {
   title: "RadRelay — Radiology follow-up dashboard",
   description:
     "AI-assisted radiology follow-up: parse, classify, draft, radiologist sign-off, multilingual outbound call.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({

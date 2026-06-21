@@ -219,6 +219,90 @@ export function mapRowToCase(row: DbCase): Case {
   };
 }
 
+/** Map fresh /orchestrator/analyze response into a Case for the dashboard queue. */
+export function mapAnalyzeResultToCase(result: {
+  case_id: string;
+  patient_name: string;
+  patient_language: string;
+  confidence: number;
+  signoff_status: string;
+  patient_script?: string;
+  patient_summary?: string;
+  risk_tier?: string;
+  contact_cadence_hours?: number;
+  parsed_findings?: {
+    modality?: string;
+    report_date?: string;
+    findings?: DbParsedFindings["findings"];
+    demographics?: {
+      age?: number;
+      sex?: string;
+      smoking_status?: string;
+    };
+  } | null;
+  guideline_classification?: {
+    guideline_used: string;
+    severity: DbClassification["severity"] | string;
+    recommended_followup: string;
+    timeframe_days: number;
+    citation?: string;
+    confidence?: number;
+  } | null;
+}): Case {
+  const pf = result.parsed_findings;
+  const normalizedPf: DbParsedFindings | null = pf
+    ? {
+        modality: pf.modality ?? "Unknown",
+        report_date: pf.report_date ?? new Date().toISOString().slice(0, 10),
+        findings: pf.findings ?? [],
+        demographics: {
+          age: pf.demographics?.age ?? 0,
+          sex: (pf.demographics?.sex as "M" | "F") ?? "M",
+          smoking_status: pf.demographics?.smoking_status as
+            | "never"
+            | "former"
+            | "current"
+            | undefined,
+        },
+        language_preference: (result.patient_language ??
+          "en") as DbCase["patient_language"],
+      }
+    : null;
+
+  const row: DbCase = {
+    id: result.case_id,
+    created_at: new Date().toISOString(),
+    patient_name: result.patient_name,
+    patient_phone: "",
+    patient_language: (result.patient_language ?? "en") as DbCase["patient_language"],
+    report_pdf_url: null,
+    parsed_findings: normalizedPf,
+    guideline_classification: result.guideline_classification
+      ? {
+          guideline_used: result.guideline_classification.guideline_used,
+          severity: result.guideline_classification.severity as DbClassification["severity"],
+          recommended_followup: result.guideline_classification.recommended_followup,
+          timeframe_days: result.guideline_classification.timeframe_days,
+          confidence: result.confidence,
+          citation: result.guideline_classification.citation ?? "",
+        }
+      : null,
+    confidence: result.confidence,
+    patient_script: result.patient_script ?? null,
+    signoff_status: result.signoff_status as DbCase["signoff_status"],
+    signoff_at: null,
+    call_sid: null,
+    call_outcome: null,
+    call_transcript: null,
+    followup_booked_slot: null,
+    cost_usd: null,
+    patient_summary: result.patient_summary ?? null,
+    risk_tier: result.risk_tier ?? null,
+    contact_cadence_hours: result.contact_cadence_hours ?? null,
+  };
+  return mapRowToCase(row);
+}
+
 // ── Patient portal ────────────────────────────────────────────────────────────
 
 function urgencyFromTimeframeDays(days: number): UrgencyTier {

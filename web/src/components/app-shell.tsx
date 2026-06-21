@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Activity } from "lucide-react";
+import Image from "next/image";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -13,8 +13,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-20 border-b border-border/70 bg-background/85 backdrop-blur supports-[backdrop-filter]:bg-background/65">
         <div className="mx-auto flex h-15 max-w-6xl items-center gap-3 px-4 py-2.5 sm:px-6">
           <Link href="/" className="group flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-sm ring-1 ring-primary/20 ring-inset transition-transform group-hover:scale-105">
-              <Activity className="h-4.5 w-4.5" />
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg shadow-sm ring-1 ring-border/60 ring-inset transition-transform group-hover:scale-105">
+              <Image
+                src="/logo.png"
+                alt=""
+                width={32}
+                height={32}
+                className="h-7 w-7 object-contain"
+                aria-hidden
+                priority
+              />
             </span>
             <span className="flex flex-col leading-none">
               <span className="font-heading text-[15px] font-semibold tracking-tight">

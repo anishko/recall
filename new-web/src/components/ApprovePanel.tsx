@@ -7,6 +7,8 @@ import type { Case } from "@/lib/types";
 import { UrgencyBadge } from "./UrgencyBadge";
 import { ConfidenceBar } from "./ConfidenceBar";
 import { MockBadge } from "./MockBadge";
+import { SectionVisibilityToggle } from "./SectionVisibilityToggle";
+import { useSectionVisibility } from "@/hooks/useSectionVisibility";
 
 interface ApprovePanelProps {
   case_: Case;
@@ -20,7 +22,7 @@ type PanelState = "idle" | "calling" | "flagging";
 export function ApprovePanel({ case_: c, onApprove, onFlag, className }: ApprovePanelProps) {
   const [state, setState] = useState<PanelState>("idle");
   const [flagNote, setFlagNote] = useState("");
-  const [scriptOpen, setScriptOpen] = useState(false);
+  const scriptToggle = useSectionVisibility("patient_script", 0);
   const [reasoningOpen, setReasoningOpen] = useState(false);
   const [epicToast, setEpicToast] = useState(false);
 
@@ -74,21 +76,30 @@ export function ApprovePanel({ case_: c, onApprove, onFlag, className }: Approve
         </div>
       </div>
 
-      {/* Patient script preview */}
-      <CollapsibleSection
-        label={
-          <span className="flex items-center gap-2">
-            Patient script preview
-            {!c.patientScript[c.patientLanguage] && <MockBadge label="demo script" />}
-          </span>
-        }
-        open={scriptOpen}
-        onToggle={() => setScriptOpen((o) => !o)}
-      >
-        <p className="text-sm leading-relaxed italic" style={{ color: "var(--color-muted)" }}>
-          &ldquo;{c.patientScript[c.patientLanguage] || c.patientScript["en"]}&rdquo;
-        </p>
-      </CollapsibleSection>
+      {/* Patient script — hidden by default (toggle 0/1) */}
+      <div className="space-y-2">
+        <SectionVisibilityToggle
+          label="Patient call script"
+          visible={scriptToggle.visible}
+          onChange={scriptToggle.setVisible}
+        />
+        {scriptToggle.isShown && (
+          <div
+            className="rounded-xl px-4 py-3"
+            style={{
+              border: "1px solid var(--color-border)",
+              background: "var(--color-surface-2)",
+            }}
+          >
+            <p className="text-sm leading-relaxed italic" style={{ color: "var(--color-muted)" }}>
+              &ldquo;{c.patientScript[c.patientLanguage] || c.patientScript["en"]}&rdquo;
+            </p>
+            {!c.patientScript[c.patientLanguage] && (
+              <MockBadge label="demo script" className="mt-2" />
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Reasoning trace */}
       <CollapsibleSection

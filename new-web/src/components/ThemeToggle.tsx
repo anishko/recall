@@ -26,8 +26,9 @@ export function ThemeToggle({ className }: { className?: string }) {
       onClick={toggle}
       aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
       className={cn(
-        "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
-        "bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-[var(--color-muted)]",
+        "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+        "border border-[var(--color-border)] bg-[var(--color-surface)]",
+        "hover:bg-[var(--color-surface-2)] text-[var(--color-muted)]",
         className
       )}
     >

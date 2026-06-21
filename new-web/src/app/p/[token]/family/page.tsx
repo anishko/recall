@@ -3,6 +3,7 @@ import { use, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import type { Locale, PatientView } from "@/lib/types";
 import { FamilyViewBanner } from "@/components/FamilyViewBanner";
+import { Logo } from "@/components/Logo";
 import { MeaningCard } from "@/components/MeaningCard";
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -72,24 +73,7 @@ export default function FamilyPage({
           borderBottom: "1px solid var(--color-border)",
         }}
       >
-        <div className="flex items-center gap-2">
-          <div
-            className="h-7 w-7 rounded-lg flex items-center justify-center"
-            style={{ background: "var(--color-primary)" }}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              className="h-4 w-4 fill-none stroke-white stroke-2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-            </svg>
-          </div>
-          <span className="text-sm font-bold" style={{ color: "var(--color-text)" }}>
-            Recall
-          </span>
-        </div>
+        <Logo className="text-sm" />
         <div className="flex items-center gap-2">
           <LangSwitcher value={locale} onChange={setLocale} />
           <ThemeToggle />
