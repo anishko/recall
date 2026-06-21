@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { apiBase } from "@/lib/api-proxy";
+import { apiBase, apiProxyHeaders } from "@/lib/api-proxy";
 
 /** Email "Yes" → approve case + trigger Twilio → redirect to case detail. */
 export async function GET(req: NextRequest) {
@@ -11,7 +11,11 @@ export async function GET(req: NextRequest) {
   try {
     const res = await fetch(
       `${apiBase()}/orchestrator/signoff/apply?token=${encodeURIComponent(token)}&action=approve`,
-      { method: "POST", signal: AbortSignal.timeout(30_000) },
+      {
+        method: "POST",
+        headers: apiProxyHeaders(),
+        signal: AbortSignal.timeout(30_000),
+      },
     );
     const data = (await res.json()) as {
       case_id?: string;

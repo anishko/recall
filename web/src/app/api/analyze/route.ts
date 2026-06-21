@@ -1,24 +1,32 @@
 import { NextResponse } from "next/server";
+import { apiBase, apiProxyHeaders } from "@/lib/api-proxy";
 
 /** Claude pipeline can take 30–60s — avoid default rewrite proxy timeout. */
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  const api = (process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000").replace(
-    /\/$/,
-    "",
-  );
+  const api = apiBase();
+  const contentType = req.headers.get("content-type") ?? "";
+
+  if (!contentType.includes("multipart/form-data")) {
+    return NextResponse.json(
+      { detail: "Expected multipart/form-data file upload" },
+      { status: 400 },
+    );
+  }
 
   try {
-    const form = await req.formData();
+    // Re-stream raw body — re-parsing FormData breaks on Vercel → ngrok proxy.
+    const payload = await req.arrayBuffer();
     const res = await fetch(`${api}/orchestrator/analyze`, {
       method: "POST",
-      body: form,
+      headers: apiProxyHeaders({ "Content-Type": contentType }),
+      body: payload,
       signal: AbortSignal.timeout(120_000),
     });
 
-    const body = await res.text();
-    return new NextResponse(body, {
+    const text = await res.text();
+    return new NextResponse(text, {
       status: res.status,
       headers: {
         "Content-Type": res.headers.get("Content-Type") ?? "application/json",

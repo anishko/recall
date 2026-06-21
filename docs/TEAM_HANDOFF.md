@@ -2,7 +2,7 @@
 
 > **Decision support only.** A human radiologist must approve before any patient is contacted. No real PHI in demos — synthetic / de-identified reports only.
 
-**Live dashboard:** [https://radrelay-ivory.vercel.app/](https://radrelay-ivory.vercel.app/)
+**Live dashboard:** [recall.pics](https://recall.pics/)
 
 ---
 
@@ -39,7 +39,7 @@ PDF upload (/upload) or email webhook (v1: upload only)
 | `api/db/`, `supabase/` | Anish | Supabase client, schema |
 | `web/` | Aditya | Next.js 15, Tailwind, shadcn |
 
-**Deploy target:** `api/` → Render (or laptop + ngrok for hackathon), `web/` → Vercel, DB → Supabase.
+**Deploy target (hackathon):** `api/` → **laptop + ngrok** (no Render/Railway), `web/` → Vercel at **recall.pics**, DB → Supabase.
 
 ---
 
@@ -49,7 +49,7 @@ Our app is **two servers**:
 
 | Piece | Where it runs | What it does |
 |-------|---------------|--------------|
-| **Web** (Next.js) | Vercel — [radrelay-ivory.vercel.app](https://radrelay-ivory.vercel.app/) | Dashboard, upload UI, email Yes button landing page |
+| **Web** (Next.js) | Vercel — [recall.pics](https://recall.pics/) | Dashboard, upload UI, email Yes button landing page |
 | **API** (FastAPI) | Your laptop `:8000` or Render | Claude, Supabase writes, Resend, Twilio calls |
 
 **The problem we hit:** Email "Yes", patient portal, and (formerly) sign-off all hit **Vercel first**. Vercel does **not** run Python. It must **forward** requests to the API via `API_PROXY_TARGET`.
@@ -59,13 +59,14 @@ Our app is **two servers**:
 1. **`/backend/*` on Vercel returned 404** — email Yes never reached the API → cases stayed `pending` → **no Twilio call**
 2. **Dashboard `/cases/{id}` returned 404** — Vercel used anon Supabase key; RLS blocked reads → "Case not found"
 3. **Wrong patient phone** — PDFs without a phone used placeholder `+15555550100` → Twilio dialed nobody real
-4. **Old email links** — each URL/env change requires a **new upload**; old JWT links keep old paths
+4. **Upload proxy "fetch failed"** — Vercel re-parsing `FormData` broke PDF uploads to ngrok; fixed by streaming raw multipart body in `/api/analyze`
+5. **Old email links** — each URL/env change requires a **new upload**; old JWT links keep old paths
 
 **The fix (architecture):**
 
 ```
 Email "Yes"
-  → https://radrelay-ivory.vercel.app/api/signoff/approve?token=...
+  → https://recall.pics/api/signoff/approve?token=...
   → Vercel route handler (web/src/app/api/signoff/approve/route.ts)
   → POST API_PROXY_TARGET/orchestrator/signoff/apply
   → API: signoff_status=approved → place_patient_call() → Twilio
@@ -76,8 +77,19 @@ Email "Yes"
 
 Twilio Media Streams need a **public HTTPS URL** for the voice websocket (`PUBLIC_API_BASE_URL`). Your laptop is not public. **ngrok** tunnels `https://xxx.ngrok-free.dev` → `localhost:8000`.
 
-- **`API_PROXY_TARGET`** (Vercel) = where Vercel forwards web requests (ngrok or Render)
-- **`PUBLIC_API_BASE_URL`** (API `.env`) = where **Twilio** connects for voice (ngrok or Render — same URL if API is on laptop)
+- **`API_PROXY_TARGET`** (**Vercel only**) = where Vercel forwards web requests → **same ngrok https URL**
+- **`PUBLIC_API_BASE_URL`** (**API `.env` only** — do **not** put on Vercel) = where **Twilio** connects for voice
+
+**Same ngrok URL, two env var names.** Example (changes each ngrok restart):
+
+```env
+# API .env (laptop)
+PUBLIC_API_BASE_URL=https://theomorphic-flashingly-florrie.ngrok-free.dev
+WEB_PUBLIC_URL=https://recall.pics
+
+# Vercel (recall.pics project) — one line required for proxy
+API_PROXY_TARGET=https://theomorphic-flashingly-florrie.ngrok-free.dev
+```
 
 **Without ngrok/Render:** Vercel can show pages but **cannot approve cases or place calls**.
 
@@ -86,11 +98,10 @@ Twilio Media Streams need a **public HTTPS URL** for the voice websocket (`PUBLI
 ```
 We're split across Vercel (web) and a FastAPI backend (laptop + ngrok OR Render).
 
-Please set these on Vercel → radrelay-ivory → Settings → Environment Variables → redeploy:
+Please set these on Vercel → **recall.pics** project → Settings → Environment Variables → **redeploy**:
 
   API_PROXY_TARGET=https://<ngrok-url>.ngrok-free.dev
-    OR https://<our-app>.onrender.com when API is on Render
-    (This is how Vercel reaches our Python API for email Yes, patient portal, etc.)
+    (Same https URL as PUBLIC_API_BASE_URL on laptop — NOT the same env var name)
 
   SUPABASE_SERVICE_ROLE_KEY=<service_role key from Supabase Dashboard → Settings → API>
     (Server-only — fixes "Case not found" 404 on /cases/{id}. Never expose to browser.)
@@ -98,12 +109,15 @@ Please set these on Vercel → radrelay-ivory → Settings → Environment Varia
   NEXT_PUBLIC_SUPABASE_URL=https://spftokekyrfjsptyybsv.supabase.co
   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
 
-While demoing from a laptop, Vedant must keep running:
-  1. uvicorn api.main:app --port 8000
-  2. ngrok http 8000
-  3. PUBLIC_API_BASE_URL on API .env = same ngrok https URL (for Twilio voice)
+Do NOT set PUBLIC_API_BASE_URL on Vercel — Next.js never reads it.
 
-After any env change: re-upload a PDF to get fresh sign-off email links.
+While demoing from a laptop, Vedant must keep running:
+  1. uvicorn api.main:app --reload --port 8000
+  2. ngrok http 8000
+  3. PUBLIC_API_BASE_URL on API .env = ngrok https URL (Twilio voice only)
+  4. API_PROXY_TARGET on Vercel = same ngrok https URL (upload + email Yes/No)
+
+After any ngrok restart: update BOTH env vars, redeploy Vercel, re-upload PDF.
 Test phone for demos: DEMO_PATIENT_PHONE=+14043331778 in API .env
 ```
 
@@ -118,6 +132,10 @@ Upload a PDF at **http://localhost:3000/upload**.
 The web app calls **`POST /api/analyze`** (Next.js route handler, 120s timeout) which proxies to the FastAPI endpoint. Do **not** use the raw `/backend/...` rewrite for analyze — it times out at ~30s while Claude runs.
 
 Entry point: `analyze_report_pdf()` in `api/orchestrator/analyze.py`.
+
+**Production path:** `recall.pics/upload` → `POST /api/analyze` (Vercel) → `API_PROXY_TARGET/orchestrator/analyze` (ngrok → laptop).
+
+**Important:** `/api/analyze` re-streams the raw multipart body to the API. Do not re-parse `FormData` on Vercel — that caused `API unreachable or timed out: fetch failed`.
 
 ```
 PDF bytes
@@ -343,8 +361,8 @@ Upload results page shows the Resend error inline if send fails.
 Email links use **`/api/signoff`**, not `/backend` (which 404s on Vercel):
 
 ```
-https://radrelay-ivory.vercel.app/api/signoff/approve?token=...
-https://radrelay-ivory.vercel.app/api/signoff/reject?token=...
+https://recall.pics/api/signoff/approve?token=...
+https://recall.pics/api/signoff/reject?token=...
 ```
 
 Implemented in:
@@ -449,17 +467,19 @@ DEMO_PATIENT_PHONE=+14043331778
 # URLs
 SIGNOFF_JWT_SECRET=                  # random string, shared across API deploys
 PUBLIC_API_BASE_URL=https://xxx.ngrok-free.dev   # Twilio voice websocket (ngrok or Render)
-WEB_PUBLIC_URL=https://radrelay-ivory.vercel.app
+WEB_PUBLIC_URL=https://recall.pics
 ```
 
 **Vercel (web) env — required for production demo:**
 
 ```env
-API_PROXY_TARGET=https://xxx.ngrok-free.dev    # or Render API URL
+API_PROXY_TARGET=https://xxx.ngrok-free.dev    # same ngrok URL as PUBLIC_API_BASE_URL on laptop
 SUPABASE_SERVICE_ROLE_KEY=                   # fixes /cases/{id} 404
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 ```
+
+Do **not** copy `PUBLIC_API_BASE_URL` to Vercel — use `API_PROXY_TARGET` with the same URL value.
 
 **Local web (`web/.env.local`) — copy service role + proxy for dashboard reads:**
 
@@ -534,13 +554,18 @@ Legacy `/backend/*` rewrite in `next.config.ts` still exists for local dev but *
 
 These are the highest-impact items for demo polish and clinical usability:
 
-#### P0 — Must-have for demo
+#### P0 — Must-have for demo ✅ verified working
 
 1. **Vercel env vars set + redeployed** — `API_PROXY_TARGET`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_*`
-2. **API running** — laptop: uvicorn + ngrok; OR Render with same env as local
-3. **`WEB_PUBLIC_URL` on API `.env`** — email links point to Vercel
+2. **API running** — laptop: `uvicorn` + `ngrok http 8000` (both must stay up during demo)
+3. **`WEB_PUBLIC_URL=https://recall.pics`** on API `.env` — email + patient links
 4. **`DEMO_PATIENT_PHONE` + `RADIOLOGIST_EMAIL`** on API `.env`
-5. **Re-upload PDF** after any env/deploy change (fresh email links)
+5. **Re-upload PDF** after any ngrok URL or deploy change (fresh email links)
+
+**Verified end-to-end (Jun 2026):**
+- Upload on recall.pics → analyze ~20–60s → Resend email with `recall.pics/api/signoff/*` links
+- Email **Yes** → approve → Twilio call → `+14043331778` (`DEMO_PATIENT_PHONE`)
+- Email **Yes** landing on `/cases/{id}?approved=1` (not `/signoff/rejected`)
 
 #### P1 — Doctor UX improvements (Aditya)
 
@@ -602,11 +627,13 @@ Voice routes under `/voice/*` — see `api/voice/README.md`.
 
 | Symptom | Fix |
 |---------|-----|
-| Email Yes → no call | Check `audit_log` for `signoff_approved`. If missing: `API_PROXY_TARGET` wrong on Vercel, or `/backend` link in old email. **Re-upload.** Use `/api/signoff/approve` links. |
+| Email Yes → **"Rejected for review"** | Vercel couldn't reach API. Set `API_PROXY_TARGET` to live ngrok URL, redeploy, keep uvicorn+ngrok running. **Re-upload** for fresh email. |
+| Email Yes → no call | Check `audit_log` for `signoff_approved`. If missing: `API_PROXY_TARGET` wrong on Vercel, or `/backend` link in old email. **Re-upload.** |
+| `API unreachable or timed out: fetch failed` on upload | API down, ngrok down, or wrong `API_PROXY_TARGET`. Restart uvicorn + ngrok; update Vercel env; redeploy. |
 | Email Yes → 404 Case not found | Set `SUPABASE_SERVICE_ROLE_KEY` on Vercel; redeploy. |
-| `vercel.app/backend/health` → 404 | Expected — use `/api/signoff/*` and `/api/patient/*`, not `/backend` |
+| `recall.pics/backend/health` → 404 | Expected — use `/api/signoff/*` and `/api/patient/*`, not `/backend` |
 | Call goes to wrong number | Set `DEMO_PATIENT_PHONE=+1...` in API `.env` |
-| `Analysis failed (500)` / socket hang up | Use `/api/analyze`; wait 30–60s |
+| `Analysis failed (500)` / socket hang up | Use `/api/analyze`; wait 30–60s; ensure API + ngrok running |
 | No sign-off email | `RADIOLOGIST_EMAIL` must be set (not demo fallback); Resend sandbox = signup email only |
 | Resend 403 gmail domain | `RESEND_FROM_EMAIL=onboarding@resend.dev`; Gmail in `RADIOLOGIST_EMAIL` only |
 | Patient portal empty/broken | Uses `/api/patient/view`; needs `API_PROXY_TARGET` on Vercel |
@@ -676,17 +703,30 @@ api/voice/
 - **Outreach errors logged** in `signoff_approved` audit + non-fatal `update_call_attempt` failures
 - **Verified:** manual approve → `call_started` in audit_log with `phone_last4: 1778`
 
+### Domain + ngrok (final working config)
+
+- **Custom domain:** `WEB_PUBLIC_URL=https://recall.pics` — all email/dashboard/patient links
+- **Hackathon API:** laptop `:8000` + ngrok only (no Render/Railway)
+- **Same ngrok URL in two places:** `PUBLIC_API_BASE_URL` (API `.env`, Twilio) + `API_PROXY_TARGET` (Vercel, web proxy)
+- **`PUBLIC_API_BASE_URL` does NOT go on Vercel**
+
+### Upload proxy fix
+
+- **`/api/analyze`** streams raw multipart body to API (fixes Vercel → ngrok `fetch failed`)
+- **`apiProxyHeaders()`** adds `ngrok-skip-browser-warning` on all server-side API fetches
+- Sign-off approve/reject routes use same helper
+
 ### Vercel / deployment split
 
-- Documented **`API_PROXY_TARGET`** — Vercel → FastAPI (ngrok or Render)
-- Documented **`PUBLIC_API_BASE_URL`** — Twilio voice websocket only (ngrok or Render)
+- Documented **`API_PROXY_TARGET`** — Vercel → FastAPI via ngrok
+- Documented **`PUBLIC_API_BASE_URL`** — Twilio voice websocket only (API `.env`, not Vercel)
 - Documented **`SUPABASE_SERVICE_ROLE_KEY`** on Vercel — fixes dashboard 404
 - Added **`web/.env.local`** template for local Next.js server reads
 - **`web/src/lib/cases.ts`** uses service role when available
 
 ### Web / upload / patient portal
 
-- **`/api/analyze`** — 120s timeout (fixes false 500 during Claude)
+- **`/api/analyze`** — 120s timeout + raw multipart re-stream (fixes Vercel upload proxy)
 - **`/api/patient/*`** — patient portal proxies
 - Patient summary fallback when DB column missing
 - Upload page: UD, dev approve/reject links, Resend errors
@@ -710,4 +750,4 @@ Parse infers language from report. UD and call script written in that language.
 
 ---
 
-*Last updated: post-Vercel/signoff/Twilio debug session — orchestrator lane. See §2b first.*
+*Last updated: recall.pics + ngrok end-to-end verified — upload, email Yes, Twilio call. See §2b first.*
