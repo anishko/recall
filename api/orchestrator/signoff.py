@@ -62,6 +62,22 @@ def make_signoff_token(case_id: str, action: Action, *, hours: int = 72) -> str:
     return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
 
 
+def make_review_token(case_id: str, *, hours: int = 72) -> str:
+    payload = {
+        "case_id": case_id,
+        "scope": "radiologist_review",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=hours),
+    }
+    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
+
+
+def verify_review_token(token: str) -> str:
+    data = jwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+    if data.get("scope") != "radiologist_review":
+        raise jwt.InvalidTokenError("not a review token")
+    return data["case_id"]
+
+
 def make_patient_token(case_id: str, *, hours: int = 168) -> str:
     payload = {
         "case_id": case_id,
@@ -85,7 +101,12 @@ def verify_patient_token(token: str) -> str:
     return data["case_id"]
 
 
-def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str, case_url: str) -> str:
+def _signoff_email_html(
+    case: dict[str, Any],
+    review_url: str,
+    approve_url: str,
+    reject_url: str,
+) -> str:
     cls = case.get("guideline_classification") or {}
     finding = (case.get("parsed_findings") or {}).get("findings", [{}])[0]
     patient = case.get("patient_name", "Patient")
@@ -93,18 +114,37 @@ def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str,
     followup = cls.get("recommended_followup", "—")
     days = cls.get("timeframe_days", "—")
     desc = finding.get("description", "actionable finding")
+    summary = (
+        case.get("patient_summary")
+        or case.get("understandable_diagnosis")
+        or desc
+    )
+    age = (case.get("parsed_findings") or {}).get("demographics", {}).get("age")
+    age_str = f", {age}y" if age else ""
     return f"""
-    <div style="font-family:sans-serif;max-width:520px">
-      <h2>{brand_name()} — sign-off needed</h2>
-      <p><strong>{patient}</strong> — {desc}</p>
-      <p><strong>{guideline}</strong><br/>{followup} within {days} days.</p>
-      <p>Confidence: {float(case.get('confidence') or 0):.0%}. Tap to approve patient contact or reject for review.</p>
-      <p>
-        <a href="{approve_url}" style="background:#059669;color:#fff;padding:10px 18px;text-decoration:none;border-radius:6px;margin-right:8px">Yes — approve</a>
-        <a href="{reject_url}" style="background:#dc2626;color:#fff;padding:10px 18px;text-decoration:none;border-radius:6px">No — review</a>
+    <div style="font-family:sans-serif;max-width:560px;line-height:1.5;color:#1a1a1a">
+      <h2 style="margin:0 0 12px">{brand_name()} — follow-up review needed</h2>
+      <p style="margin:0 0 16px;font-size:15px">
+        <strong>{patient}</strong>{age_str} — {summary}
       </p>
-      <p><a href="{case_url}">Open full case in dashboard</a></p>
-      <p style="font-size:12px;color:#666">Decision support only. You authorize all patient communication.</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#444">
+        <strong>{guideline}</strong> · {followup} within {days} days
+      </p>
+      <p style="margin:0 0 20px;font-size:13px;color:#666">
+        Model confidence: {float(case.get('confidence') or 0):.0%}.
+        Open the case review for full analysis, guideline citation, and patient script.
+      </p>
+      <p style="margin:0 0 24px">
+        <a href="{review_url}" style="background:#2d5a54;color:#fff;padding:12px 22px;text-decoration:none;border-radius:8px;font-weight:600;display:inline-block">
+          Review case &amp; decide
+        </a>
+      </p>
+      <p style="margin:0 0 8px;font-size:12px;color:#888">Or respond directly:</p>
+      <p style="margin:0 0 20px">
+        <a href="{approve_url}" style="background:#059669;color:#fff;padding:8px 14px;text-decoration:none;border-radius:6px;margin-right:8px;font-size:13px">Approve follow-up</a>
+        <a href="{reject_url}" style="background:#dc2626;color:#fff;padding:8px 14px;text-decoration:none;border-radius:6px;font-size:13px">Do not follow up</a>
+      </p>
+      <p style="font-size:11px;color:#999;margin:0">Decision support only. You authorize all patient communication.</p>
     </div>
     """
 
@@ -124,10 +164,14 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     reject_tok = make_signoff_token(case_id, "reject")
     approve_url = f"{_signoff_link_base()}/approve?{urlencode({'token': approve_tok})}"
     reject_url = f"{_signoff_link_base()}/reject?{urlencode({'token': reject_tok})}"
-    case_url = f"{_web_base()}/cases/{case_id}"
+    review_tok = make_review_token(case_id)
+    review_url = (
+        f"{_web_base()}/review/{case_id}?"
+        f"{urlencode({'token': review_tok, 'approve': approve_tok, 'reject': reject_tok})}"
+    )
 
     subject = f"{brand_name()}: approve follow-up for {case.get('patient_name', 'patient')}"
-    html = _signoff_email_html(case, approve_url, reject_url, case_url)
+    html = _signoff_email_html(case, review_url, approve_url, reject_url)
     result = send_email(to, subject, html)
     sent = bool(result.get("sent"))
 
@@ -143,6 +187,7 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
         "error": result.get("error"),
         "approve_url": approve_url,
         "reject_url": reject_url,
+        "review_url": review_url,
     }
 
 

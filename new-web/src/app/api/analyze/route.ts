@@ -39,7 +39,11 @@ export async function POST(req: Request) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Proxy failed";
     return NextResponse.json(
-      { detail: `API unreachable or timed out: ${msg}` },
+      {
+        detail:
+          `API unreachable (${apiBase()}). Start the backend: ` +
+          `uvicorn api.main:app --reload --port 8000. ${msg}`,
+      },
       { status: 502 },
     );
   }

@@ -17,6 +17,7 @@ from api.orchestrator.signoff import (
     make_patient_token,
     request_radiologist_signoff,
     verify_patient_token,
+    verify_review_token,
 )
 
 log = logging.getLogger("radrelay.orchestrator.router")
@@ -100,6 +101,35 @@ def signoff_decide(req: SignoffDecideRequest) -> dict:
 @router.post("/signoff/request/{case_id}")
 def signoff_request(case_id: str) -> dict:
     return request_radiologist_signoff(case_id)
+
+
+@router.get("/signoff/review")
+def signoff_review(token: str = Query(...)) -> dict:
+    """Radiologist review page — case data behind signed email link."""
+    try:
+        case_id = verify_review_token(token)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Invalid or expired review link") from e
+
+    case = case_repo.get_case(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    return {
+        "case_id": case_id,
+        "patient_name": case.get("patient_name"),
+        "patient_language": case.get("patient_language"),
+        "confidence": case.get("confidence"),
+        "signoff_status": case.get("signoff_status"),
+        "patient_summary": case.get("patient_summary"),
+        "understandable_diagnosis": case.get("understandable_diagnosis"),
+        "patient_script": case.get("patient_script"),
+        "parsed_findings": case.get("parsed_findings"),
+        "guideline_classification": case.get("guideline_classification"),
+        "risk_tier": case.get("risk_tier"),
+        "contact_cadence_hours": case.get("contact_cadence_hours"),
+        "flagged_low_confidence": float(case.get("confidence") or 0) < 0.85,
+    }
 
 
 @router.get("/patient/view")

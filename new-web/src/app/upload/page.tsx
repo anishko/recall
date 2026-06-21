@@ -1,76 +1,22 @@
 "use client";
-import { useState, useRef, DragEvent } from "react";
-import Link from "next/link";
-import {
-  Upload,
-  FileText,
-  CheckCircle,
-  AlertTriangle,
-  X,
-  ArrowRight,
-  Loader2,
-} from "lucide-react";
-import { UrgencyBadge } from "@/components/UrgencyBadge";
-import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { ThemeToggle } from "@/components/ThemeToggle";
-import type { UrgencyTier } from "@/lib/types";
-import { normalizeLocale, mapRowToCase } from "@/lib/caseAdapter";
-import type { DbCase } from "@/lib/supabaseTypes";
+import { useState, useRef, useEffect, DragEvent } from "react";
+import { motion } from "framer-motion";
+import { Upload, AlertTriangle, Loader2 } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 type Stage = "idle" | "uploading" | "done" | "error";
-
-interface AnalyzeResult {
-  case_id: string;
-  patient_name: string;
-  patient_language: string;
-  confidence: number;
-  flagged_low_confidence: boolean;
-  signoff_email_sent: boolean;
-  signoff_email_to?: string;
-  signoff_email_error?: string | null;
-  signoff_status: string;
-  patient_script?: string;
-  patient_url?: string;
-  patient_summary?: string;
-  understandable_diagnosis?: string;
-  guideline_classification?: {
-    guideline_used: string;
-    severity: string;
-    recommended_followup: string;
-    timeframe_days: number;
-    citation?: string;
-  };
-  parsed_findings?: {
-    modality: string;
-    findings: { organ: string; description: string; measurement?: string }[];
-    demographics?: { age?: number };
-  };
-}
-
-function severityToUrgency(
-  severity: string,
-  timeframeDays: number,
-): UrgencyTier {
-  if (severity === "critical" || severity === "high") return "URGENT";
-  if (severity === "moderate") return "SHORT";
-  if (severity === "low") return "ROUTINE";
-  return timeframeDays === 0 ? "NO_FU" : "ROUTINE";
-}
-
-const LANG_LABELS: Record<string, string> = {
-  en: "English",
-  "ar-TN": "Tunisian Arabic",
-  fr: "French",
-  zh: "Chinese",
-};
 
 export default function UploadPage() {
   const [stage, setStage] = useState<Stage>("idle");
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<AnalyzeResult | null>(null);
   const [error, setError] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("recall_theme", "dark");
+  }, []);
 
   async function upload(f: File) {
     setFile(f);
@@ -94,7 +40,6 @@ export default function UploadPage() {
         return;
       }
 
-      setResult(data as AnalyzeResult);
       setStage("done");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
@@ -117,490 +62,166 @@ export default function UploadPage() {
   function reset() {
     setStage("idle");
     setFile(null);
-    setResult(null);
     setError("");
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  const cls = result?.guideline_classification;
-  const urgency =
-    cls ? severityToUrgency(cls.severity, cls.timeframe_days) : "ROUTINE";
-
   return (
-    <div
-      className="min-h-dvh"
-      style={{ background: "var(--color-bg)" }}
-    >
-      {/* Top bar */}
-      <header
-        className="sticky top-0 z-20 flex items-center justify-between px-6 py-4"
-        style={{
-          background: "var(--color-surface)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <div className="flex items-center gap-3">
-          <Link
-            href="/dashboard"
-            className="flex items-center gap-2"
-            aria-label="Back to dashboard"
-          >
-            <div
-              className="h-7 w-7 rounded-lg flex items-center justify-center"
-              style={{ background: "var(--color-primary)" }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-4 w-4 fill-none stroke-white stroke-2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-              </svg>
-            </div>
-            <span className="font-bold" style={{ color: "var(--color-text)" }}>
-              Recall
-            </span>
-          </Link>
-          <span style={{ color: "var(--color-border)" }}>/</span>
-          <span
-            className="text-sm font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            Upload Report
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <Link
-            href="/dashboard"
-            className="text-sm hover:underline"
-            style={{ color: "var(--color-muted)" }}
-          >
-            ← Back to queue
-          </Link>
-        </div>
-      </header>
+    <div className="landing-page min-h-dvh flex flex-col bg-black">
+      <div className="px-6 sm:px-10 py-6 sm:py-8">
+        <Logo href="/" size="header" />
+      </div>
 
-      <main className="mx-auto max-w-2xl px-6 py-10 space-y-8">
-        <div>
-          <h1
-            className="text-2xl font-bold"
-            style={{ color: "var(--color-text)" }}
-          >
-            Upload Radiology Report
-          </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
-            Drag and drop a PDF or click to browse. Claude will parse the
-            report, apply clinical guidelines, and draft a patient script for
-            radiologist review.
-          </p>
-        </div>
-
-        {/* Drop zone */}
+      <main className="flex-1 mx-auto w-full max-w-lg px-6 sm:px-10 pb-16 flex flex-col items-center justify-center">
         {stage === "idle" && (
-          <div
-            onDrop={handleDrop}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onClick={() => inputRef.current?.click()}
-            className="rounded-2xl border-2 border-dashed flex flex-col items-center justify-center gap-4 py-20 cursor-pointer transition-colors"
-            style={{
-              borderColor: dragOver
-                ? "var(--color-primary)"
-                : "var(--color-border)",
-              background: dragOver
-                ? "color-mix(in oklch, var(--color-primary) 4%, transparent)"
-                : "var(--color-surface)",
-            }}
-          >
-            <div
-              className="h-16 w-16 rounded-2xl flex items-center justify-center"
-              style={{ background: "var(--color-routine-bg)" }}
+          <>
+            <h1
+              className="font-display text-4xl sm:text-5xl text-center mb-3 leading-tight"
+              style={{ color: "var(--color-text)" }}
             >
-              <Upload
-                className="h-7 w-7"
-                style={{ color: "var(--color-primary)" }}
+              Upload report
+            </h1>
+            <p
+              className="font-sans text-base text-center mb-10 max-w-sm leading-relaxed"
+              style={{ color: "var(--color-muted-2)" }}
+            >
+              Drop a report. We&apos;ll analyze it and send the
+              radiologist a review request.
+            </p>
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onClick={() => inputRef.current?.click()}
+              className={`upload-drop-zone w-full rounded-none flex flex-col items-center justify-center gap-4 py-16 cursor-pointer transition-colors${dragOver ? " upload-drop-zone-active" : ""}`}
+            >
+              <Upload className="h-8 w-8" style={{ color: "var(--color-primary)" }} />
+              <p
+                className="font-sans text-sm font-medium"
+                style={{ color: "var(--color-text)" }}
+              >
+                Drop PDF or click to browse
+              </p>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={handleFile}
               />
             </div>
-            <div className="text-center">
-              <p
-                className="text-base font-semibold"
-                style={{ color: "var(--color-text)" }}
-              >
-                Drop a PDF here or{" "}
-                <span style={{ color: "var(--color-primary)" }}>browse</span>
-              </p>
-              <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
-                Radiology report · PDF · Max 20 MB
-              </p>
-            </div>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="application/pdf"
-              className="hidden"
-              onChange={handleFile}
-            />
-          </div>
+          </>
         )}
 
-        {/* Loading */}
         {stage === "uploading" && (
-          <div
-            className="rounded-2xl p-10 flex flex-col items-center gap-5"
-            style={{
-              background: "var(--color-surface)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
+          <div className="flex flex-col items-center gap-5 text-center">
             <Loader2
-              className="h-12 w-12 animate-spin"
+              className="h-10 w-10 animate-spin"
               style={{ color: "var(--color-primary)" }}
             />
-            <div className="text-center">
-              <p
-                className="font-semibold"
-                style={{ color: "var(--color-text)" }}
-              >
-                Analyzing with Claude…
-              </p>
-              <p
-                className="text-sm mt-1"
-                style={{ color: "var(--color-muted)" }}
-              >
-                {file?.name} · Parsing findings, applying guidelines,
-                drafting script
-              </p>
-            </div>
-            <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>
-              This usually takes 30–60 seconds
+            <p
+              className="font-display text-2xl"
+              style={{ color: "var(--color-text)" }}
+            >
+              Analyzing report…
+            </p>
+            <p
+              className="font-sans text-sm max-w-sm"
+              style={{ color: "var(--color-muted-2)" }}
+            >
+              {file?.name}
+            </p>
+            <p className="font-sans text-xs" style={{ color: "var(--color-muted-2)" }}>
+              Parsing findings, applying guidelines, drafting script
             </p>
           </div>
         )}
 
-        {/* Error */}
-        {stage === "error" && (
-          <div
-            className="rounded-2xl p-8 space-y-4"
-            style={{
-              background: "var(--color-urgent-bg)",
-              border:
-                "1px solid color-mix(in oklch, var(--color-urgent) 30%, transparent)",
-            }}
+        {stage === "done" && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="flex flex-col items-center gap-6 text-center max-w-md"
           >
-            <div className="flex items-start gap-3">
-              <AlertTriangle
-                className="h-5 w-5 shrink-0 mt-0.5"
-                style={{ color: "var(--color-urgent)" }}
+            <div className="relative h-24 w-24">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 200, damping: 14, delay: 0.1 }}
+                className="absolute inset-0 rounded-full"
+                style={{ background: "rgba(106, 154, 146, 0.15)" }}
               />
-              <div>
-                <p
-                  className="font-semibold"
-                  style={{ color: "var(--color-urgent)" }}
-                >
-                  Analysis failed
-                </p>
-                <p
-                  className="text-sm mt-1"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {error}
-                </p>
-              </div>
+              <svg viewBox="0 0 52 52" className="absolute inset-0 m-auto h-14 w-14">
+                <motion.circle
+                  cx="26"
+                  cy="26"
+                  r="24"
+                  fill="none"
+                  stroke="var(--color-primary)"
+                  strokeWidth="2"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                />
+                <motion.path
+                  fill="none"
+                  stroke="var(--color-primary)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M14 27l8 8 16-16"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 0.35, delay: 0.45, ease: "easeOut" }}
+                />
+              </svg>
+            </div>
+            <div className="space-y-2">
+              <h2
+                className="font-display text-3xl sm:text-4xl"
+                style={{ color: "var(--color-text)" }}
+              >
+                Sent for approval
+              </h2>
+              <p
+                className="font-sans text-base leading-relaxed"
+                style={{ color: "var(--color-muted-2)" }}
+              >
+                Follow-up request sent to the radiologist for review.
+                They&apos;ll receive an email with the full clinical analysis.
+              </p>
             </div>
             <button
               onClick={reset}
-              className="flex items-center gap-2 text-sm font-semibold hover:underline"
+              className="font-sans text-sm font-medium hover:underline"
+              style={{ color: "var(--color-primary)" }}
+            >
+              Upload another report
+            </button>
+          </motion.div>
+        )}
+
+        {stage === "error" && (
+          <div className="w-full space-y-4 text-center">
+            <AlertTriangle
+              className="h-8 w-8 mx-auto"
+              style={{ color: "var(--color-urgent)" }}
+            />
+            <p className="font-sans font-medium" style={{ color: "var(--color-urgent)" }}>
+              {error}
+            </p>
+            <button
+              onClick={reset}
+              className="font-sans text-sm font-medium hover:underline"
               style={{ color: "var(--color-primary)" }}
             >
               Try again
             </button>
           </div>
         )}
-
-        {/* Results */}
-        {stage === "done" && result && (
-          <div className="space-y-5">
-            {/* Success header */}
-            <div
-              className="rounded-2xl p-6 flex items-center gap-4"
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              <div
-                className="h-12 w-12 rounded-full flex items-center justify-center shrink-0"
-                style={{ background: "var(--color-success-bg, oklch(0.97 0.02 145))" }}
-              >
-                <CheckCircle
-                  className="h-6 w-6"
-                  style={{ color: "var(--color-success)" }}
-                />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p
-                  className="font-semibold"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  Analysis complete
-                </p>
-                <p
-                  className="text-sm mt-0.5 truncate"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  {file?.name} · Case {result.case_id}
-                </p>
-              </div>
-              <button
-                onClick={reset}
-                className="p-1.5 rounded-lg transition-colors"
-                style={{ color: "var(--color-muted)" }}
-                aria-label="Upload another"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Key facts */}
-            <div
-              className="rounded-2xl p-6 space-y-4"
-              style={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <div>
-                  <p
-                    className="text-lg font-bold"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    {result.patient_name}
-                  </p>
-                  <p
-                    className="text-sm mt-0.5"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    {result.parsed_findings?.modality ?? "Radiology"} ·{" "}
-                    {LANG_LABELS[normalizeLocale(result.patient_language)] ??
-                      "English"}
-                    {result.parsed_findings?.demographics?.age
-                      ? ` · ${result.parsed_findings.demographics.age}y`
-                      : ""}
-                  </p>
-                </div>
-                <UrgencyBadge tier={urgency} size="lg" />
-              </div>
-
-              <div className="space-y-2">
-                <ConfidenceBar value={result.confidence} />
-                {result.flagged_low_confidence && (
-                  <p
-                    className="text-xs flex items-center gap-1.5"
-                    style={{ color: "var(--color-urgent)" }}
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-                    Confidence below 85% — flagged for human review. No call
-                    will be placed until a radiologist approves.
-                  </p>
-                )}
-              </div>
-
-              {cls && (
-                <div
-                  className="rounded-xl p-4 space-y-2"
-                  style={{ background: "var(--color-surface-2)" }}
-                >
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wide"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    Guideline classification
-                  </p>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span style={{ color: "var(--color-muted)" }}>Guideline: </span>
-                      <span
-                        className="font-medium"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {cls.guideline_used}
-                      </span>
-                    </div>
-                    <div>
-                      <span style={{ color: "var(--color-muted)" }}>Severity: </span>
-                      <span
-                        className="font-medium capitalize"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {cls.severity}
-                      </span>
-                    </div>
-                    <div className="col-span-2">
-                      <span style={{ color: "var(--color-muted)" }}>
-                        Follow-up:{" "}
-                      </span>
-                      <span
-                        className="font-medium"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {cls.recommended_followup} ({cls.timeframe_days} days)
-                      </span>
-                    </div>
-                    {cls.citation && (
-                      <div className="col-span-2">
-                        <span style={{ color: "var(--color-muted)" }}>
-                          Citation:{" "}
-                        </span>
-                        <span
-                          className="text-xs"
-                          style={{ color: "var(--color-text)" }}
-                        >
-                          {cls.citation}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Sign-off status */}
-            <div
-              className="rounded-2xl p-5 flex items-start gap-3"
-              style={{
-                background: result.signoff_email_sent
-                  ? "var(--color-routine-bg)"
-                  : "var(--color-surface-2)",
-                border: `1px solid color-mix(in oklch, ${result.signoff_email_sent ? "var(--color-success)" : "var(--color-border)"} 30%, transparent)`,
-              }}
-            >
-              {result.signoff_email_sent ? (
-                <CheckCircle
-                  className="h-5 w-5 shrink-0"
-                  style={{ color: "var(--color-success)" }}
-                />
-              ) : (
-                <AlertTriangle
-                  className="h-5 w-5 shrink-0"
-                  style={{ color: "var(--color-muted)" }}
-                />
-              )}
-              <div>
-                <p
-                  className="text-sm font-semibold"
-                  style={{
-                    color: result.signoff_email_sent
-                      ? "var(--color-success)"
-                      : "var(--color-text)",
-                  }}
-                >
-                  {result.signoff_email_sent
-                    ? `Sign-off email sent to ${result.signoff_email_to ?? "radiologist"}`
-                    : "Sign-off email not sent"}
-                </p>
-                {result.signoff_email_error && (
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: "var(--color-urgent)" }}
-                  >
-                    Error: {result.signoff_email_error}
-                  </p>
-                )}
-                <p className="text-xs mt-1" style={{ color: "var(--color-muted)" }}>
-                  No patient contact will occur until the radiologist approves
-                  via the email link.
-                </p>
-              </div>
-            </div>
-
-            {/* Patient script */}
-            {result.patient_script && (
-              <div
-                className="rounded-2xl p-5 space-y-3"
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <p
-                  className="text-xs font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Patient call script (
-                  {LANG_LABELS[normalizeLocale(result.patient_language)] ??
-                    "English"}
-                  )
-                </p>
-                <p
-                  className="text-sm leading-relaxed italic"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  &ldquo;{result.patient_script}&rdquo;
-                </p>
-              </div>
-            )}
-
-            {/* UD */}
-            {result.understandable_diagnosis && (
-              <div
-                className="rounded-2xl p-5 space-y-3"
-                style={{
-                  background: "var(--color-surface)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <p
-                  className="text-xs font-semibold uppercase tracking-wide"
-                  style={{ color: "var(--color-muted)" }}
-                >
-                  Plain-language diagnosis
-                </p>
-                <p
-                  className="text-sm leading-relaxed"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  {result.understandable_diagnosis}
-                </p>
-              </div>
-            )}
-
-            {/* CTAs */}
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link
-                href={`/dashboard/case/${result.case_id}`}
-                className="flex-1 flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white transition-colors"
-                style={{ background: "var(--color-primary)" }}
-              >
-                Open in dashboard
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-              <button
-                onClick={reset}
-                className="flex-1 flex items-center justify-center rounded-xl px-5 py-3 text-sm font-medium transition-colors"
-                style={{
-                  border: "1px solid var(--color-border)",
-                  background: "var(--color-surface)",
-                  color: "var(--color-muted)",
-                }}
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Upload another
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Footer disclaimer */}
-        <footer className="text-center pb-6">
-          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>
-            Decision support only. A radiologist reviews and approves every
-            patient communication. No PHI is stored beyond what is necessary
-            for follow-up coordination.
-          </p>
-        </footer>
       </main>
     </div>
   );

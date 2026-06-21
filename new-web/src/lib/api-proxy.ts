@@ -1,6 +1,10 @@
 /** Proxy to FastAPI — used by Next.js route handlers (server-side). */
 export function apiBase(): string {
-  return (process.env.API_PROXY_TARGET ?? "http://127.0.0.1:8000").replace(/\/$/, "");
+  const target =
+    process.env.API_PROXY_TARGET?.trim() ||
+    process.env.PUBLIC_API_BASE_URL?.trim() ||
+    "http://127.0.0.1:8000";
+  return target.replace(/\/$/, "");
 }
 
 /** Headers for server-side fetch to the API (ngrok interstitial skip, etc.). */

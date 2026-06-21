@@ -14,9 +14,9 @@ export default function HomePage() {
       id="main-content"
       className="landing-page relative min-h-dvh flex flex-col bg-[var(--color-bg)]"
     >
-      <header className="relative z-10 px-6 sm:px-10 py-6 sm:py-8">
+      <div className="relative z-10 px-6 sm:px-10 py-6 sm:py-8">
         <Logo href="/" size="header" />
-      </header>
+      </div>
 
       <div className="relative z-10 flex-1 flex items-center pl-6 pr-6 sm:pl-10 sm:pr-10 lg:pl-12 lg:pr-12 pb-16 w-full max-w-[1600px] mx-auto">
         <div className="grid lg:grid-cols-2 gap-10 lg:gap-5 xl:gap-6 items-center w-full">
