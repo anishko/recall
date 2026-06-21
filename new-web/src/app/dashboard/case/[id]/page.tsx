@@ -301,7 +301,6 @@ export default function CaseDetailPage({
               <ClinicalEvaluationDashboard
                 data={evaluation}
                 variant="landing"
-                hidePatientName
               />
             )}
 
