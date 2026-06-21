@@ -46,12 +46,27 @@ export function AnalyzeResults({ result }: { result: AnalyzeResponse }) {
       )}
 
       {!result.flagged_low_confidence && (
-        <p className="text-xs text-muted-foreground">
-          Sign-off email sent to radiologist
-          {result.signoff_email_sent ? "" : " (configure RESEND_API_KEY)"}.
-          Risk tier: <strong>{result.risk_tier}</strong> · check-in every{" "}
-          {result.contact_cadence_hours}h after contact.
-        </p>
+        <div className="text-xs text-muted-foreground space-y-1">
+          {result.signoff_email_sent ? (
+            <p>
+              Sign-off email sent to{" "}
+              <strong>{result.signoff_email_to ?? "radiologist"}</strong>.
+            </p>
+          ) : (
+            <p className="text-amber-700 dark:text-amber-400">
+              Sign-off email not sent
+              {result.signoff_email_to ? ` (to ${result.signoff_email_to})` : ""}
+              {result.signoff_email_error
+                ? `: ${result.signoff_email_error}`
+                : " — check RESEND_API_KEY and RESEND_FROM_EMAIL in .env"}
+              .
+            </p>
+          )}
+          <p>
+            Risk tier: <strong>{result.risk_tier}</strong> · check-in every{" "}
+            {result.contact_cadence_hours}h after contact.
+          </p>
+        </div>
       )}
 
       {result.patient_url && !result.flagged_low_confidence && (
@@ -61,6 +76,44 @@ export function AnalyzeResults({ result }: { result: AnalyzeResponse }) {
             {result.patient_url}
           </a>
         </p>
+      )}
+
+      {result.understandable_diagnosis && (
+        <Card className="border-primary/20">
+          <CardContent className="space-y-3 pt-6">
+            <h3 className="text-sm font-semibold">
+              Understandable diagnosis (UD) — test output
+            </h3>
+            <p className="text-sm leading-relaxed whitespace-pre-line">
+              {result.understandable_diagnosis}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Also printed in API server logs. Not stored in Supabase — passed
+              into the patient call script prompt only.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {result.signoff_approve_url && (
+        <Card className="border-dashed">
+          <CardContent className="space-y-2 pt-6">
+            <h3 className="text-sm font-semibold">Sign-off links (dev test)</h3>
+            <p className="text-xs text-muted-foreground">
+              Same links as the radiologist email. Use if inbox is slow.
+            </p>
+            <p className="break-all font-mono text-xs">
+              <a href={result.signoff_approve_url} className="text-primary underline">
+                Approve
+              </a>
+            </p>
+            <p className="break-all font-mono text-xs">
+              <a href={result.signoff_reject_url} className="text-primary underline">
+                Reject
+              </a>
+            </p>
+          </CardContent>
+        </Card>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">

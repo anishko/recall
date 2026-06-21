@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from api.db import cases as case_repo
 from api.db.audit import audit_log
 from api.orchestrator.analyze import analyze_report_pdf
-from api.orchestrator.cadence import next_retry_at
+from api.orchestrator.cadence import next_retry_at, plain_patient_summary
 from api.orchestrator.signoff import (
     apply_signoff_decision,
     handle_signoff_link,
@@ -61,8 +61,11 @@ async def analyze_report(file: UploadFile = File(...)) -> dict:
 def signoff_approve(token: str = Query(...)) -> HTMLResponse:
     try:
         result = handle_signoff_link(token, "approve")
-        url = result.get("patient_url", f"{WEB_BASE()}/")
-        return RedirectResponse(url=f"{WEB_BASE()}/signoff/success?case={result.get('status')}", status_code=302)
+        case_id = result.get("case_id", "")
+        return RedirectResponse(
+            url=f"{WEB_BASE()}/cases/{case_id}?approved=1",
+            status_code=302,
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -99,10 +102,18 @@ def patient_view(token: str = Query(...)) -> dict:
         raise HTTPException(status_code=404, detail="Case not found")
 
     cls = case.get("guideline_classification") or {}
+    summary = case.get("patient_summary") or ""
+    if not summary and case.get("parsed_findings"):
+        summary = plain_patient_summary(
+            case.get("patient_name", "Patient"),
+            case["parsed_findings"],
+            cls,
+            case.get("patient_language", "en"),
+        )
     return {
         "patient_name": case.get("patient_name"),
         "language": case.get("patient_language", "en"),
-        "summary": case.get("patient_summary") or "",
+        "summary": summary,
         "recommended_followup": cls.get("recommended_followup"),
         "timeframe_days": cls.get("timeframe_days"),
         "booked": bool(case.get("followup_booked_slot")),

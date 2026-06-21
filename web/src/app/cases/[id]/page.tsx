@@ -200,6 +200,23 @@ export default async function CaseDetailPage({
               </CardContent>
             </Card>
 
+            {/* Patient summary (plain language) */}
+            {c.patient_summary && (
+              <Card className="border-primary/20">
+                <CardContent className="space-y-3 pt-6">
+                  <SectionTitle icon={Languages}>
+                    Patient summary
+                    <span className="ml-2 font-normal text-muted-foreground">
+                      {LANGUAGE_LABELS[c.patient_language]}
+                    </span>
+                  </SectionTitle>
+                  <p className="rounded-md border bg-muted/30 p-4 text-sm leading-relaxed whitespace-pre-line">
+                    {c.patient_summary}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Patient script */}
             {c.patient_script && (
               <Card>

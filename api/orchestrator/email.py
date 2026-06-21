@@ -10,18 +10,21 @@ import httpx
 log = logging.getLogger("radrelay.orchestrator.email")
 
 
+def brand_name() -> str:
+    return os.environ.get("RESEND_FROM_NAME", "Recall").strip() or "Recall"
+
+
 def resend_from_address() -> str:
-    """From header, e.g. 'RadRelay <notify@yourdomain.com>'."""
+    """From header, e.g. 'Recall <notify@yourdomain.com>'."""
     email = os.environ.get("RESEND_FROM_EMAIL", "onboarding@resend.dev").strip()
-    name = os.environ.get("RESEND_FROM_NAME", "RadRelay").strip()
-    return f"{name} <{email}>"
+    return f"{brand_name()} <{email}>"
 
 
-def send_email(to: str, subject: str, html: str) -> bool:
+def send_email(to: str, subject: str, html: str) -> dict[str, str | bool]:
     api_key = os.environ.get("RESEND_API_KEY", "").strip()
     if not api_key:
         log.warning("RESEND_API_KEY missing — skipping email to %s", to)
-        return False
+        return {"sent": False, "error": "RESEND_API_KEY missing"}
 
     resp = httpx.post(
         "https://api.resend.com/emails",
@@ -38,6 +41,10 @@ def send_email(to: str, subject: str, html: str) -> bool:
         timeout=30.0,
     )
     if resp.status_code >= 400:
+        try:
+            err = resp.json().get("message", resp.text)
+        except Exception:
+            err = resp.text
         log.error("resend_error status=%s body=%s", resp.status_code, resp.text)
-        return False
-    return True
+        return {"sent": False, "error": err}
+    return {"sent": True}

@@ -1,11 +1,31 @@
 import logging
 import os
+import re
 
 from api.db import cases as case_repo
 from api.db.audit import audit_log
 from api.voice.twilio_client import build_outbound_twiml, get_twilio_client
 
 log = logging.getLogger("radrelay.voice.call")
+
+
+def resolve_patient_phone(phone: str) -> str:
+    """Demo override: DEMO_PATIENT_PHONE in .env routes all outbound dials."""
+    override = os.environ.get("DEMO_PATIENT_PHONE", "").strip()
+    if not override:
+        return phone
+    digits = re.sub(r"\D", "", override)
+    if override.startswith("+"):
+        resolved = override
+    elif len(digits) == 10:
+        resolved = f"+1{digits}"
+    elif len(digits) == 11 and digits.startswith("1"):
+        resolved = f"+{digits}"
+    else:
+        resolved = f"+{digits}"
+    if resolved != phone:
+        log.info("DEMO_PATIENT_PHONE override: %s -> %s", phone, resolved)
+    return resolved
 
 
 class SignoffNotApprovedError(RuntimeError):
@@ -41,6 +61,7 @@ def place_patient_call(
             pass
         raise SignoffNotApprovedError(case_id, status)
 
+    phone = resolve_patient_phone(phone)
     from_number = os.environ.get("TWILIO_PHONE_NUMBER")
     twiml = build_outbound_twiml(case_id)
     log.info(

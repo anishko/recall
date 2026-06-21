@@ -26,9 +26,14 @@ export function PatientPortal({ token }: { token: string }) {
   const [shareMsg, setShareMsg] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/backend/orchestrator/patient/view?token=${encodeURIComponent(token)}`)
+    fetch(`/api/patient/view?token=${encodeURIComponent(token)}`)
       .then(async (r) => {
-        if (!r.ok) throw new Error("Invalid or expired link");
+        if (!r.ok) {
+          const body = await r.json().catch(() => ({}));
+          const detail =
+            typeof body.detail === "string" ? body.detail : "Invalid or expired link";
+          throw new Error(detail);
+        }
         return r.json() as Promise<PatientView>;
       })
       .then(setData)
@@ -39,7 +44,7 @@ export function PatientPortal({ token }: { token: string }) {
     setBooking(true);
     try {
       const r = await fetch(
-        `/backend/orchestrator/patient/book?token=${encodeURIComponent(token)}`,
+        `/api/patient/book?token=${encodeURIComponent(token)}`,
         { method: "POST" },
       );
       if (!r.ok) throw new Error("Booking failed");
@@ -57,7 +62,7 @@ export function PatientPortal({ token }: { token: string }) {
   async function shareFamily() {
     try {
       const r = await fetch(
-        `/backend/orchestrator/patient/family?token=${encodeURIComponent(token)}`,
+        `/api/patient/family?token=${encodeURIComponent(token)}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -97,7 +102,12 @@ export function PatientPortal({ token }: { token: string }) {
 
       <Card>
         <CardContent className="space-y-4 pt-6">
-          <p className="text-sm leading-relaxed">{data.summary}</p>
+          <h2 className="text-sm font-semibold text-primary">
+            Your results, in plain language
+          </h2>
+          <p className="text-sm leading-relaxed whitespace-pre-line">
+            {data.summary}
+          </p>
           {data.recommended_followup && (
             <p className="text-xs text-muted-foreground">
               Recommended: {data.recommended_followup}

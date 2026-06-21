@@ -116,7 +116,7 @@ export function ReportUpload() {
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">
           {error}
           <p className="mt-1 text-xs opacity-80">
-            Make sure the API is running:{" "}
+            Analysis takes ~30–60s. If this persists, restart the API:{" "}
             <code className="font-mono">uvicorn api.main:app --reload</code>
           </p>
         </div>

@@ -13,7 +13,7 @@ import jwt
 from api.db import cases as case_repo
 from api.db.audit import audit_log
 from api.orchestrator.cadence import should_call_immediately
-from api.orchestrator.email import send_email
+from api.orchestrator.email import brand_name, send_email
 from api.voice.call import SignoffNotApprovedError, place_patient_call
 
 log = logging.getLogger("radrelay.orchestrator.signoff")
@@ -33,12 +33,28 @@ def _api_base() -> str:
     return os.environ.get("PUBLIC_API_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 
 
+def _signoff_link_base() -> str:
+    """Base URL for email approve/reject links.
+
+    Routes through the deployed web app (/backend proxy) so doctors land on
+    Vercel, not ngrok. PUBLIC_API_BASE_URL stays for Twilio voice webhooks.
+    """
+    web = os.environ.get("WEB_PUBLIC_URL", "").strip().rstrip("/")
+    if web:
+        return f"{web}/backend"
+    return _api_base()
+
+
 def _web_base() -> str:
     return os.environ.get("WEB_PUBLIC_URL", "http://localhost:3000").rstrip("/")
 
 
 def _radiologist_email() -> str:
-    return os.environ.get("RADIOLOGIST_EMAIL", "radiologist@radrelay.demo")
+    email = os.environ.get("RADIOLOGIST_EMAIL", "").strip()
+    if email:
+        return email
+    log.warning("RADIOLOGIST_EMAIL not set — using demo fallback (you will not receive mail)")
+    return "radiologist@radrelay.demo"
 
 
 def make_signoff_token(case_id: str, action: Action, *, hours: int = 72) -> str:
@@ -73,7 +89,7 @@ def verify_patient_token(token: str) -> str:
     return data["case_id"]
 
 
-def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str) -> str:
+def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str, case_url: str) -> str:
     cls = case.get("guideline_classification") or {}
     finding = (case.get("parsed_findings") or {}).get("findings", [{}])[0]
     patient = case.get("patient_name", "Patient")
@@ -83,7 +99,7 @@ def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str)
     desc = finding.get("description", "actionable finding")
     return f"""
     <div style="font-family:sans-serif;max-width:520px">
-      <h2>RadRelay — sign-off needed</h2>
+      <h2>{brand_name()} — sign-off needed</h2>
       <p><strong>{patient}</strong> — {desc}</p>
       <p><strong>{guideline}</strong><br/>{followup} within {days} days.</p>
       <p>Confidence: {float(case.get('confidence') or 0):.0%}. Tap to approve patient contact or reject for review.</p>
@@ -91,6 +107,7 @@ def _signoff_email_html(case: dict[str, Any], approve_url: str, reject_url: str)
         <a href="{approve_url}" style="background:#059669;color:#fff;padding:10px 18px;text-decoration:none;border-radius:6px;margin-right:8px">Yes — approve</a>
         <a href="{reject_url}" style="background:#dc2626;color:#fff;padding:10px 18px;text-decoration:none;border-radius:6px">No — review</a>
       </p>
+      <p><a href="{case_url}">Open full case in dashboard</a></p>
       <p style="font-size:12px;color:#666">Decision support only. You authorize all patient communication.</p>
     </div>
     """
@@ -109,20 +126,28 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     to = radiologist_email or _radiologist_email()
     approve_tok = make_signoff_token(case_id, "approve")
     reject_tok = make_signoff_token(case_id, "reject")
-    approve_url = f"{_api_base()}/orchestrator/signoff/approve?{urlencode({'token': approve_tok})}"
-    reject_url = f"{_api_base()}/orchestrator/signoff/reject?{urlencode({'token': reject_tok})}"
+    approve_url = f"{_signoff_link_base()}/orchestrator/signoff/approve?{urlencode({'token': approve_tok})}"
+    reject_url = f"{_signoff_link_base()}/orchestrator/signoff/reject?{urlencode({'token': reject_tok})}"
+    case_url = f"{_web_base()}/cases/{case_id}"
 
-    subject = f"RadRelay: approve follow-up for {case.get('patient_name', 'patient')}"
-    html = _signoff_email_html(case, approve_url, reject_url)
-    sent = send_email(to, subject, html)
+    subject = f"{brand_name()}: approve follow-up for {case.get('patient_name', 'patient')}"
+    html = _signoff_email_html(case, approve_url, reject_url, case_url)
+    result = send_email(to, subject, html)
+    sent = bool(result.get("sent"))
 
     audit_log(
         case_id,
         "system",
         "request_radiologist_signoff",
-        {"channel": "email", "to": to, "sent": sent},
+        {"channel": "email", "to": to, "sent": sent, "error": result.get("error")},
     )
-    return {"sent": sent, "to": to, "approve_url": approve_url, "reject_url": reject_url}
+    return {
+        "sent": sent,
+        "to": to,
+        "error": result.get("error"),
+        "approve_url": approve_url,
+        "reject_url": reject_url,
+    }
 
 
 def _trigger_patient_outreach(case_id: str) -> dict[str, Any]:
@@ -144,7 +169,10 @@ def _trigger_patient_outreach(case_id: str) -> dict[str, Any]:
 
     try:
         result = place_patient_call(case_id, phone, script, language)
-        case_repo.update_call_attempt(case_id, attempt=1, call_sid=result["call_sid"])
+        try:
+            case_repo.update_call_attempt(case_id, attempt=1, call_sid=result["call_sid"])
+        except Exception:
+            log.exception("update_call_attempt_failed case_id=%s", case_id)
         return {"call": "started", **result}
     except SignoffNotApprovedError as e:
         return {"call": "blocked", "reason": str(e)}
@@ -158,7 +186,7 @@ def apply_signoff_decision(case_id: str, action: Action, actor: str = "radiologi
         patient_token = make_patient_token(case_id)
         patient_url = f"{_web_base()}/p/{patient_token}"
         audit_log(case_id, "system", "patient_link_issued", {"url": patient_url})
-        return {"status": "approved", "patient_url": patient_url, "outreach": outreach}
+        return {"status": "approved", "case_id": case_id, "patient_url": patient_url, "outreach": outreach}
 
     case_repo.update_signoff(case_id, "rejected")
     audit_log(case_id, actor, "signoff_rejected", {})

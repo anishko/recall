@@ -20,15 +20,20 @@ export interface AnalyzeResponse {
   risk_tier?: string;
   contact_cadence_hours?: number;
   signoff_email_sent?: boolean;
+  signoff_email_to?: string;
+  signoff_email_error?: string;
+  signoff_approve_url?: string;
+  signoff_reject_url?: string;
   patient_url?: string;
   patient_summary?: string;
+  understandable_diagnosis?: string;
 }
 
 export async function analyzeReportPdf(file: File): Promise<AnalyzeResponse> {
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch("/backend/orchestrator/analyze", {
+  const res = await fetch("/api/analyze", {
     method: "POST",
     body: form,
   });

@@ -67,6 +67,7 @@ export interface Case {
   next_contact_at?: string | null;
   call_attempts?: number | null;
   family_contact_phone?: string | null;
+  understandable_diagnosis?: string | null;
 }
 
 /** A row of the `audit_log` table. */

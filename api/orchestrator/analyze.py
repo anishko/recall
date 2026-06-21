@@ -23,8 +23,10 @@ from api.orchestrator.guidelines import (
     CLASSIFY_SYSTEM,
     DRAFT_SCRIPT_SYSTEM,
     PARSE_SYSTEM,
+    UD_SYSTEM,
 )
 from api.orchestrator.signoff import make_patient_token, request_radiologist_signoff
+from api.voice.call import resolve_patient_phone
 
 log = logging.getLogger("radrelay.orchestrator.analyze")
 
@@ -148,7 +150,10 @@ def classify_actionability(parsed: dict[str, Any]) -> dict[str, Any]:
 
 
 def draft_patient_script(
-    case_summary: str, language: str, patient_name: str
+    case_summary: str,
+    language: str,
+    patient_name: str,
+    understandable_diagnosis: str,
 ) -> str:
     return _claude_text(
         DRAFT_SCRIPT_SYSTEM,
@@ -158,9 +163,50 @@ def draft_patient_script(
                 "text": (
                     f"Language: {language}\n"
                     f"Patient name: {patient_name}\n\n"
-                    f"Case summary:\n{case_summary}"
+                    f"Understandable diagnosis (UD) — base the call script on this:\n"
+                    f"{understandable_diagnosis}\n\n"
+                    f"Clinical case summary:\n{case_summary}"
                 ),
             }
+        ],
+    ).strip()
+
+
+def generate_understandable_diagnosis(
+    pdf_bytes: bytes,
+    parsed: dict[str, Any],
+    classification: dict[str, Any],
+    language: str,
+    patient_name: str,
+) -> str:
+    """Plain-language UD with clinical context — re-reads PDF for text + embedded images."""
+    b64 = base64.standard_b64encode(pdf_bytes).decode("ascii")
+    context = {
+        "patient_name": patient_name,
+        "parsed_findings": parsed,
+        "classification": classification,
+    }
+    return _claude_text(
+        UD_SYSTEM,
+        [
+            {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": b64,
+                },
+            },
+            {
+                "type": "text",
+                "text": (
+                    f"Language for UD: {language}\n"
+                    f"Patient: {patient_name}\n\n"
+                    f"Structured context (use alongside the PDF):\n"
+                    f"{json.dumps(context, indent=2)}\n\n"
+                    "Write the Understandable Diagnosis (UD) now."
+                ),
+            },
         ],
     ).strip()
 
@@ -220,7 +266,7 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
 
     language = parsed["language_preference"]
     patient_name = parsed.pop("_patient_name")
-    patient_phone = parsed.pop("_patient_phone")
+    patient_phone = resolve_patient_phone(parsed.pop("_patient_phone"))
 
     severity = classification.get("severity", "moderate")
     tier = risk_tier(severity)
@@ -229,11 +275,23 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
         patient_name, parsed, classification, language
     )
 
+    ud = generate_understandable_diagnosis(
+        pdf_bytes, parsed, classification, language, patient_name
+    )
+    audit_log(None, "claude", "generate_understandable_diagnosis", {"language": language})
+    log.info(
+        "\n========== UNDERSTANDABLE DIAGNOSIS (%s) ==========\n%s\n========== END UD ==========",
+        language,
+        ud,
+    )
+
     patient_script: str | None = None
     signoff_email: dict | None = None
     if confidence >= CONFIDENCE_THRESHOLD:
         summary = _case_summary(parsed, classification)
-        patient_script = draft_patient_script(summary, language, patient_name)
+        patient_script = draft_patient_script(
+            summary, language, patient_name, ud
+        )
         audit_log(None, "claude", "draft_patient_script", {"language": language})
         signoff_status = "pending"
     else:
@@ -243,7 +301,7 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
     patient_token = make_patient_token(case_id)
     pdf_url = _upload_pdf(case_id, pdf_bytes)
 
-    row = {
+    core_row = {
         "id": case_id,
         "patient_name": patient_name,
         "patient_phone": patient_phone,
@@ -253,8 +311,11 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
         "guideline_classification": classification,
         "confidence": confidence,
         "patient_script": patient_script,
-        "patient_summary": patient_summary,
         "signoff_status": signoff_status,
+    }
+    extended_row = {
+        **core_row,
+        "patient_summary": patient_summary,
         "risk_tier": tier,
         "contact_cadence_hours": cadence_h,
         "next_contact_at": next_contact_at(tier) if signoff_status == "pending" else None,
@@ -265,15 +326,10 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
 
     sb = get_supabase()
     try:
-        sb.table("cases").insert(row).execute()
+        sb.table("cases").insert(extended_row).execute()
     except Exception:
-        log.exception("insert_with_cadence_failed — retrying core columns only")
-        core = {k: v for k, v in row.items() if k in {
-            "id", "patient_name", "patient_phone", "patient_language",
-            "report_pdf_url", "parsed_findings", "guideline_classification",
-            "confidence", "patient_script", "signoff_status",
-        }}
-        sb.table("cases").insert(core).execute()
+        log.exception("insert_extended_failed — retrying core columns only")
+        sb.table("cases").insert(core_row).execute()
     audit_log(case_id, "system", "case_created", {"source": "upload", "filename": filename})
 
     if signoff_status == "pending":
@@ -296,11 +352,16 @@ def analyze_report_pdf(pdf_bytes: bytes, filename: str) -> dict[str, Any]:
         "confidence": confidence,
         "patient_script": patient_script,
         "patient_summary": patient_summary,
+        "understandable_diagnosis": ud,
         "signoff_status": signoff_status,
         "report_pdf_url": pdf_url,
         "flagged_low_confidence": confidence < CONFIDENCE_THRESHOLD,
         "risk_tier": tier,
         "contact_cadence_hours": cadence_h,
         "signoff_email_sent": signoff_email.get("sent") if signoff_email else False,
+        "signoff_email_to": signoff_email.get("to") if signoff_email else None,
+        "signoff_email_error": signoff_email.get("error") if signoff_email else None,
+        "signoff_approve_url": signoff_email.get("approve_url") if signoff_email else None,
+        "signoff_reject_url": signoff_email.get("reject_url") if signoff_email else None,
         "patient_url": f"{os.environ.get('WEB_PUBLIC_URL', 'http://localhost:3000')}/p/{patient_token}",
     }
