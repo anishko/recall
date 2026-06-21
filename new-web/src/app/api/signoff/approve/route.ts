@@ -6,7 +6,7 @@ import { apiBase, apiProxyHeaders } from "@/lib/api-proxy";
  *
  * Landing route for the "Yes" button in radiologist sign-off emails.
  * Proxies to the backend, then redirects to the case detail page with
- * ?approved=1 so the LiveCallStrip auto-triggers.
+ * lands on /dashboard/case/{id}?approved=1.
  *
  * URL must match what the backend bakes into Resend emails via WEB_PUBLIC_URL
  * (currently https://recall.pics/api/signoff/approve?token=…).
@@ -47,11 +47,10 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Backend did not return case_id", { status: 500 });
   }
 
-  const params = new URLSearchParams({ approved: "1" });
+  const params = new URLSearchParams({ approved: "1", view: "evaluation" });
   if (callSid) params.set("call_sid", callSid);
 
-  // Redirect to /cases/[id] which itself redirects to /dashboard/case/[id]
   return NextResponse.redirect(
-    new URL(`/cases/${caseId}?${params}`, req.url),
+    new URL(`/dashboard/case/${caseId}?${params}`, req.url),
   );
 }

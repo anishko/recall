@@ -40,19 +40,18 @@ def _synthetic_slot(timeframe_days: int | None) -> str:
 
 
 async def _case_loader(case_id: str) -> CaseContext:
+    from api.voice.demo_context import context_from_db_row, resolve_case_context
+
     row = await asyncio.to_thread(case_repo.get_case, case_id)
-    if not row:
-        raise RuntimeError(f"case {case_id} not found")
-    classification = row.get("guideline_classification") or {}
-    timeframe = classification.get("timeframe_days") if isinstance(classification, dict) else None
-    return CaseContext(
-        case_id=row["id"],
-        patient_name=row.get("patient_name") or "there",
-        patient_language=row.get("patient_language") or "en",
-        patient_script=row.get("patient_script")
-            or "Tell the patient about the finding and offer the follow-up slot.",
-        offered_slot=_synthetic_slot(timeframe),
-    )
+    if row:
+        classification = row.get("guideline_classification") or {}
+        timeframe = (
+            classification.get("timeframe_days")
+            if isinstance(classification, dict)
+            else None
+        )
+        return context_from_db_row(row, _synthetic_slot(timeframe))
+    return resolve_case_context(case_id, offered_slot=_synthetic_slot(14))
 
 
 async def _persist_outcome(state: BridgeState) -> None:

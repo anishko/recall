@@ -161,7 +161,6 @@ export function ApprovePanel({
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={handleApprove}
-                disabled={state === "approving"}
                 className="btn-accent w-full flex items-center justify-center gap-2 !py-3.5 disabled:opacity-60"
               >
                 <CheckCircle className="h-4 w-4" />
@@ -180,7 +179,6 @@ export function ApprovePanel({
               <motion.button
                 whileTap={{ scale: 0.96 }}
                 onClick={handleApprove}
-                disabled={state === "approving"}
                 className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-semibold text-white transition-colors disabled:opacity-60"
                 style={{ background: "var(--color-primary)" }}
               >

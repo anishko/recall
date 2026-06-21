@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Phone, PhoneOff, X } from "lucide-react";
 import type { Case } from "@/lib/types";
+import { shortCaseRef } from "@/lib/deidentify";
 
 type CallState = "ringing" | "connected" | "talking" | "scheduled" | "ended";
 
@@ -72,7 +73,7 @@ export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
             </div>
             <div>
               <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>
-                {c.patientName.split(" ")[0]}
+                Outbound call · {shortCaseRef(c.id)}
               </p>
               <p className="text-xs" style={{ color: "var(--color-muted)" }}>
                 {STATE_LABELS[callState]}

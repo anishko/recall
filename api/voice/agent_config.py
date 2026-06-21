@@ -80,7 +80,10 @@ def _system_prompt(case: CaseContext) -> str:
         f"IMPORTANT: Speak to the patient ONLY in {lang_name}. Every response "
         f"you generate must be in {lang_name}. Do not switch languages even if "
         "the patient does.\n\n"
-        f"Patient name: {case.patient_name}.\n"
+        "IMPORTANT: Do NOT speak until a human answers. If you hear an automated "
+        "call screening or voicemail prompt (e.g. 'record your name', 'stay on the "
+        "line', Google Call Screen), remain completely silent and wait. Only "
+        "introduce yourself after a person speaks to you directly.\n\n"
         f"Offer this specific follow-up slot and only this slot: "
         f"{case.offered_slot}.\n"
         "When the patient agrees, call the book_followup function with that "
@@ -95,12 +98,16 @@ def _greeting(case: CaseContext) -> str:
     template = _GREETING_TEMPLATE_BY_LANG.get(
         case.patient_language, _GREETING_TEMPLATE_BY_LANG["en"]
     )
-    return template.format(name=case.patient_name)
+    name = case.patient_name
+    if name in ("", "Unknown", "Patient", "there"):
+        # No auto-greeting — wait for human (avoids talking to Google Call Screen).
+        return ""
+    return template.format(name=name)
 
 
 def build_settings(case: CaseContext) -> dict:
     lang = case.patient_language
-    return {
+    settings = {
         "type": "Settings",
         "audio": {
             "input": {"encoding": "mulaw", "sample_rate": 8000},
@@ -165,6 +172,9 @@ def build_settings(case: CaseContext) -> dict:
                     "model": _SPEAK_MODEL_BY_LANG.get(lang, "aura-2-thalia-en"),
                 }
             },
-            "greeting": _greeting(case),
         },
     }
+    greeting = _greeting(case)
+    if greeting:
+        settings["agent"]["greeting"] = greeting
+    return settings

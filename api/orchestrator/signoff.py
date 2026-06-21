@@ -171,7 +171,7 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     review_tok = make_review_token(case_id)
     review_url = (
         f"{_web_base()}/dashboard/case/{case_id}?"
-        f"{urlencode({'token': review_tok})}"
+        f"{urlencode({'token': review_tok, 'view': 'evaluation'})}"
     )
 
     subject = f"{brand_name()}: approve follow-up for {case.get('patient_name', 'patient')}"
@@ -198,6 +198,7 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
 def _trigger_demo_outreach(case_id: str) -> dict[str, Any]:
     """Mock dashboard cases (e.g. RR-001) aren't in Postgres — dial demo phone anyway."""
     from api.voice.call import resolve_patient_phone
+    from api.voice.demo_context import register_demo_context, resolve_case_context
     from api.voice.twilio_client import dial_patient
 
     phone = resolve_patient_phone(os.environ.get("DEMO_PATIENT_PHONE", ""))
@@ -205,6 +206,7 @@ def _trigger_demo_outreach(case_id: str) -> dict[str, Any]:
         return {"call": "skipped", "reason": "no_demo_phone"}
 
     try:
+        register_demo_context(resolve_case_context(case_id))
         sid = dial_patient(case_id, phone)
         log.info("demo_outreach_started case_id=%s call_sid=%s to=%s", case_id, sid, phone)
         return {"call": "started", "call_sid": sid, "status": "dialing"}

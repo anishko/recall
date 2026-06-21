@@ -1,4 +1,4 @@
-import type { UrgencyTier } from "./types";
+import type { Case, UrgencyTier } from "./types";
 import type { DbClassification, DbParsedFindings } from "./supabaseTypes";
 
 export interface ClinicalFinding {
@@ -170,6 +170,49 @@ export function buildClinicalInsights(
   return insights;
 }
 
+export function buildEvaluationFromReview(
+  payload: Record<string, unknown>,
+): ClinicalEvaluationData {
+  const cls = payload.guideline_classification as ClinicalEvaluationData["classification"];
+  const pf = payload.parsed_findings as {
+    modality?: string;
+    report_date?: string;
+    findings?: ClinicalFinding[];
+    demographics?: ClinicalEvaluationData["demographics"];
+  } | undefined;
+  const confidence = float(payload.confidence);
+  const timeframeDays = cls?.timeframe_days ?? 0;
+
+  return {
+    caseId: String(payload.case_id ?? ""),
+    patientName: String(payload.patient_name ?? "Unknown"),
+    patientLanguage: String(payload.patient_language ?? "en"),
+    confidence,
+    flaggedLowConfidence: Boolean(
+      payload.flagged_low_confidence ?? confidence < 0.85,
+    ),
+    signoffStatus: payload.signoff_status as string | undefined,
+    urgency: severityToUrgency(cls?.severity, timeframeDays),
+    modality: pf?.modality,
+    reportDate: pf?.report_date,
+    demographics: pf?.demographics,
+    findings: pf?.findings ?? [],
+    classification: cls,
+    patientSummary: (payload.patient_summary as string) ?? undefined,
+    understandableDiagnosis:
+      (payload.understandable_diagnosis as string) ?? undefined,
+    patientScript: (payload.patient_script as string) ?? undefined,
+    riskTier: (payload.risk_tier as string) ?? undefined,
+    contactCadenceHours:
+      (payload.contact_cadence_hours as number) ?? undefined,
+  };
+}
+
+function float(v: unknown): number {
+  const n = typeof v === "number" ? v : parseFloat(String(v ?? 0));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export function buildEvaluationFromDb(row: {
   id: string;
   patient_name: string;
@@ -257,6 +300,34 @@ export function buildEvaluationFromAnalyze(result: {
     patientScript: result.patient_script,
     riskTier: result.risk_tier,
     contactCadenceHours: result.contact_cadence_hours,
+  };
+}
+
+/** Fallback when only dashboard Case shape is available (queue navigation). */
+export function buildEvaluationFromCase(c: Case): ClinicalEvaluationData {
+  const timeframeMatch = c.recommendedTimeframe.match(/(\d+)/);
+  const timeframeDays = timeframeMatch ? parseInt(timeframeMatch[1], 10) : 0;
+
+  return {
+    caseId: c.id,
+    patientName: c.patientName,
+    patientLanguage: c.patientLanguage,
+    confidence: c.confidence,
+    flaggedLowConfidence: c.confidence < 0.85,
+    signoffStatus: c.status,
+    urgency: c.urgency,
+    demographics: c.patientAge > 0 ? { age: c.patientAge } : undefined,
+    findings: c.finding
+      ? [{ organ: "primary", description: c.findingDetail || c.finding }]
+      : [],
+    classification: {
+      guideline_used: c.guideline,
+      severity: c.urgency === "URGENT" ? "high" : "moderate",
+      recommended_followup: c.finding,
+      timeframe_days: timeframeDays,
+    },
+    patientSummary: c.findingDetail,
+    patientScript: c.patientScript[c.patientLanguage] ?? c.patientScript.en,
   };
 }
 

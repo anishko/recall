@@ -76,7 +76,7 @@ def signoff_approve(token: str = Query(...)) -> HTMLResponse:
         result = handle_signoff_link(token, "approve")
         case_id = result.get("case_id", "")
         return RedirectResponse(
-            url=f"{WEB_BASE()}/cases/{case_id}?approved=1",
+            url=f"{WEB_BASE()}/dashboard/case/{case_id}?approved=1&view=evaluation",
             status_code=302,
         )
     except Exception as e:

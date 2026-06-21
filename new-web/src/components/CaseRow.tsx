@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { cn } from "@/lib/cn";
 import type { Case } from "@/lib/types";
+import { shortCaseRef } from "@/lib/deidentify";
 import { UrgencyBadge } from "./UrgencyBadge";
 import { ConfidenceBar } from "./ConfidenceBar";
 import { LanguageFlag } from "./LanguageFlag";

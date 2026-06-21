@@ -17,6 +17,7 @@ import {
   smokingLabel,
   type ClinicalEvaluationData,
 } from "@/lib/clinicalEvaluation";
+import { redactPatientNames, shortCaseRef } from "@/lib/deidentify";
 import { normalizeLocale } from "@/lib/caseAdapter";
 import { ConfidenceBar } from "./ConfidenceBar";
 import { UrgencyBadge } from "./UrgencyBadge";
@@ -157,13 +158,13 @@ export function ClinicalEvaluationDashboard({
               className="font-display text-2xl sm:text-3xl"
               style={{ color: "var(--color-text)" }}
             >
-              {data.patientName}
+              Clinical evaluation
             </h2>
             <p
               className={cn("text-sm mt-1", variant === "landing" && "font-sans")}
               style={{ color: "var(--color-muted-2)" }}
             >
-              {data.modality ?? "Radiology"} · Case {data.caseId.slice(0, 8)}…
+              {data.modality ?? "Radiology"} · Case {shortCaseRef(data.caseId)}
             </p>
           </div>
           <UrgencyBadge tier={data.urgency} size="lg" />
@@ -551,7 +552,7 @@ export function ClinicalEvaluationDashboard({
               )}
               style={{ color: "var(--color-text)" }}
             >
-              &ldquo;{data.patientScript}&rdquo;
+              &ldquo;{redactPatientNames(data.patientScript, data.patientName)}&rdquo;
             </p>
           </div>
         )}

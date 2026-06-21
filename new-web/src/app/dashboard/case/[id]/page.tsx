@@ -1,7 +1,7 @@
 "use client";
-import { use, useState, useEffect } from "react";
+import { use, useState, useEffect, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Clock,
   User,
@@ -12,15 +12,19 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Logo } from "@/components/Logo";
-import { cn } from "@/lib/cn";
 import { useDashboard } from "@/store/useDashboard";
 import { SliceCarousel } from "@/components/SliceCarousel";
 import { ReportPanel } from "@/components/ReportPanel";
 import { ApprovePanel } from "@/components/ApprovePanel";
-import { LiveCallStrip } from "@/components/LiveCallStrip";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
+import { ClinicalEvaluationDashboard } from "@/components/ClinicalEvaluationDashboard";
 import type { Case } from "@/lib/types";
 import { mapReviewPayloadToCase } from "@/lib/caseAdapter";
+import {
+  buildEvaluationFromCase,
+  buildEvaluationFromReview,
+  type ClinicalEvaluationData,
+} from "@/lib/clinicalEvaluation";
 
 const LANG_LABELS: Record<string, string> = {
   en: "English",
@@ -29,11 +33,18 @@ const LANG_LABELS: Record<string, string> = {
   zh: "Chinese",
 };
 
+type CaseTab = "evaluation" | "imaging" | "report" | "patient";
+
 function timeAgo(iso: string) {
   const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   return `${Math.floor(mins / 60)}h ago`;
+}
+
+function initialTab(searchParams: URLSearchParams): CaseTab {
+  const view = searchParams.get("view") ?? searchParams.get("tab");
+  return view === "evaluation" ? "evaluation" : "imaging";
 }
 
 export default function CaseDetailPage({
@@ -48,15 +59,31 @@ export default function CaseDetailPage({
   const storeCase = cases.find((c) => c.id === id);
   const reviewToken = searchParams.get("token");
 
-  // If case not in store (direct URL / email link), fetch individually
   const [fetchedCase, setFetchedCase] = useState<Case | null>(null);
+  const [fetchedEvaluation, setFetchedEvaluation] =
+    useState<ClinicalEvaluationData | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
+
+  const [activeTab, setActiveTab] = useState<CaseTab>(() =>
+    initialTab(searchParams),
+  );
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", "dark");
     localStorage.setItem("recall_theme", "dark");
   }, []);
+
+  useEffect(() => {
+    try {
+      const cached = sessionStorage.getItem(`recall_eval_${id}`);
+      if (cached) {
+        setFetchedEvaluation(JSON.parse(cached) as ClinicalEvaluationData);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [id]);
 
   useEffect(() => {
     if (storeCase || fetchedCase || fetchLoading) return;
@@ -74,11 +101,20 @@ export default function CaseDetailPage({
           setFetchError(data?.error ?? "Case not found.");
           return;
         }
-        setFetchedCase(
-          reviewToken
-            ? mapReviewPayloadToCase(data as Record<string, unknown>)
-            : (data as Case),
-        );
+        if (reviewToken) {
+          setFetchedCase(mapReviewPayloadToCase(data as Record<string, unknown>));
+          setFetchedEvaluation(
+            buildEvaluationFromReview(data as Record<string, unknown>),
+          );
+        } else {
+          const caseData = data as Case & {
+            evaluation?: ClinicalEvaluationData;
+          };
+          setFetchedCase(caseData);
+          if (caseData.evaluation) {
+            setFetchedEvaluation(caseData.evaluation);
+          }
+        }
       })
       .catch(() => setFetchError("Could not load case."))
       .finally(() => setFetchLoading(false));
@@ -86,12 +122,11 @@ export default function CaseDetailPage({
 
   const c = storeCase ?? fetchedCase;
 
-  // Trigger LiveCallStrip if landing from email ?approved=1
-  const initiallyApproved = searchParams.get("approved") === "1";
-  const [showCallStrip, setShowCallStrip] = useState(initiallyApproved);
-  const [activeTab, setActiveTab] = useState<"imaging" | "report" | "patient">(
-    "imaging",
-  );
+  const evaluation = useMemo(() => {
+    if (fetchedEvaluation) return fetchedEvaluation;
+    if (c) return buildEvaluationFromCase(c);
+    return null;
+  }, [fetchedEvaluation, c]);
 
   if (fetchLoading && !c) {
     return (
@@ -148,7 +183,6 @@ export default function CaseDetailPage({
       const outreach = data.outreach;
       const callStarted =
         outreach?.call === "started" || Boolean(data.call_sid ?? outreach?.call_sid);
-      if (callStarted) setShowCallStrip(true);
       return {
         ok: true,
         callStarted,
@@ -173,6 +207,8 @@ export default function CaseDetailPage({
   }
 
   const isHighRisk = c.confidence < 0.85 || c.urgency === "URGENT";
+
+  const tabs: CaseTab[] = ["evaluation", "imaging", "report", "patient"];
 
   return (
     <div className="min-h-dvh flex flex-col bg-black">
@@ -236,14 +272,14 @@ export default function CaseDetailPage({
       <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-3 px-6 sm:px-10 pb-10">
         <div className="landing-panel overflow-hidden min-h-[480px] min-w-0">
           <div
-            className="flex border-b font-sans"
+            className="flex border-b font-sans overflow-x-auto"
             style={{ borderColor: "rgba(255,255,255,0.08)" }}
           >
-            {(["imaging", "report", "patient"] as const).map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors capitalize"
+                className="px-4 py-3 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors capitalize shrink-0"
                 style={{
                   borderColor:
                     activeTab === tab
@@ -261,6 +297,14 @@ export default function CaseDetailPage({
           </div>
 
           <div className="p-6">
+            {activeTab === "evaluation" && evaluation && (
+              <ClinicalEvaluationDashboard
+                data={evaluation}
+                variant="landing"
+                hidePatientName
+              />
+            )}
+
             {activeTab === "imaging" && (
               <div className="space-y-4 w-full">
                 <div className="flex items-center justify-between gap-4">
@@ -351,7 +395,6 @@ export default function CaseDetailPage({
 
             {activeTab === "patient" && (
               <div className="max-w-xl space-y-4">
-                {/* Demographics */}
                 <div
                   className="rounded-xl p-4 space-y-4"
                   style={{
@@ -417,7 +460,6 @@ export default function CaseDetailPage({
                   </div>
                 </div>
 
-                {/* Patient portal preview */}
                 <div
                   className="rounded-xl p-4 space-y-3"
                   style={{
@@ -449,7 +491,6 @@ export default function CaseDetailPage({
                   </Link>
                 </div>
 
-                {/* Confidence breakdown */}
                 <div
                   className="rounded-xl p-4 space-y-3"
                   style={{
@@ -485,7 +526,6 @@ export default function CaseDetailPage({
           </div>
         </div>
 
-        {/* Right column — sticky actions */}
         <div className="landing-panel p-6 min-w-0 xl:max-w-[360px]">
           <div className="sticky top-6">
             <ApprovePanel
@@ -497,12 +537,6 @@ export default function CaseDetailPage({
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {showCallStrip && (
-          <LiveCallStrip case_={c} onClose={() => setShowCallStrip(false)} />
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -16,8 +16,12 @@ function ReviewRedirectInner({
 
   useEffect(() => {
     const token = searchParams.get("token");
-    const qs = token ? `?token=${encodeURIComponent(token)}` : "";
-    router.replace(`/dashboard/case/${id}${qs}`);
+    const view = searchParams.get("view") ?? "evaluation";
+    const qs = new URLSearchParams();
+    if (token) qs.set("token", token);
+    if (view) qs.set("view", view);
+    const q = qs.toString();
+    router.replace(`/dashboard/case/${id}${q ? `?${q}` : ""}`);
   }, [id, searchParams, router]);
 
   return (
