@@ -51,7 +51,7 @@ PARSE_SCHEMA = {
         "sex": "M or F",
         "smoking_status": "optional never|former|current",
     },
-    "language_preference": "en|es|vi",
+    "language_preference": "en|ar-TN|fr|zh",
 }
 
 CLASSIFY_SCHEMA = {

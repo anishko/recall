@@ -1,0 +1,60 @@
+{
+  "patient": {
+    "hi": "你好",
+    "hero_subtitle": "您的扫描显示了一些我们想要跟进的情况。以下是它的含义。",
+    "what_we_found": "我们发现了什么",
+    "show_doctor_view": "查看医生所见",
+    "hide_doctor_view": "隐藏医生视图",
+    "what_this_means": "这意味着什么",
+    "what_happens_next": "接下来会发生什么",
+    "questions": "有问题？",
+    "call_us": "回电：(555) RE-CALL",
+    "email_nurse": "发邮件给护士：nurse@recall.com",
+    "share_family": "与家人分享",
+    "copy_family_link": "复制家庭链接",
+    "text_to_someone": "发短信给某人",
+    "book_now": "选择时间",
+    "disclaimer": "这不是医疗诊断。请始终与您的医生交谈。",
+    "powered_by": "由 Recall 提供",
+    "link_expired": "此链接已过期。请致电 (555) RE-CALL。",
+    "not_alarmist": "大多数这样的点并不严重。我们想要更仔细地检查以确认。",
+    "not_diagnosis": "这不是癌症诊断。这是一个需要随访的发现。",
+    "early_detection": "早期发现能带来最佳结果——这就是我们致电的原因。",
+    "viewing_as_family": "您正在以家庭成员身份查看",
+    "they_can_book": "他们可以在此预约随访：",
+    "help_them_book": "我想帮他们预约"
+  },
+  "scheduling": {
+    "title": "选择随访时间",
+    "confirm": "确认预约",
+    "booked": "您已预约",
+    "reminder": "我们将发短信提醒您。",
+    "no_slots": "暂无可用时段。请致电 (555) RE-CALL。"
+  },
+  "sendToFamily": {
+    "title": "发送给家庭成员",
+    "phone_label": "家庭成员的电话号码",
+    "phone_placeholder": "+1 (555) 000-0000",
+    "name_label": "他们的名字（可选）",
+    "name_placeholder": "例如：大卫",
+    "language_label": "首选语言",
+    "consent": "我已获得分享此人号码的许可",
+    "send": "通过短信发送",
+    "sent": "已发送至",
+    "sent_suffix": "他们将收到",
+    "rate_limit": "今天已达到最大发送次数。明天再试。",
+    "mocked_note": "（模拟）"
+  },
+  "lang": {
+    "en": "EN",
+    "ar-TN": "ع",
+    "fr": "FR",
+    "zh": "中文"
+  },
+  "urgency": {
+    "URGENT": "紧急",
+    "SHORT": "短期随访",
+    "ROUTINE": "常规",
+    "NO_FU": "无需随访"
+  }
+}

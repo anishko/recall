@@ -37,9 +37,14 @@ PDF upload (/upload) or email webhook (v1: upload only)
 | `api/orchestrator/` | Vedant | FastAPI, Anthropic SDK, Resend |
 | `api/voice/` | Anish | Deepgram Voice Agent, Twilio Media Streams |
 | `api/db/`, `supabase/` | Anish | Supabase client, schema |
-| `web/` | Aditya | Next.js 15, Tailwind, shadcn |
+| `new-web/` | Aditya | Next.js 15, Tailwind, Zustand (active frontend) |
+| `web/` | Aditya | Legacy frontend (kept in git; retired in favour of new-web) |
 
-**Deploy target (hackathon):** `api/` → **laptop + ngrok** (no Render/Railway), `web/` → Vercel at **recall.pics**, DB → Supabase.
+**Languages (as of migration):** `en / ar-TN (Tunisian Arabic) / fr (French) / zh (Mandarin Simplified)`.
+Backend prompts in `guidelines.py` and `analyze.py` updated accordingly.
+⚠️ Voice risk: verify Deepgram TTS/STT supports `ar-TN` before demo — may need to fall back to `ar` or `en`.
+
+**Deploy target (hackathon):** `api/` → **laptop + ngrok** (no Render/Railway), `new-web/` → Vercel at **recall.pics** (set Vercel root to `new-web/`), DB → Supabase.
 
 ---
 
@@ -596,7 +601,7 @@ These are the highest-impact items for demo polish and clinical usability:
 4. Reviews: finding | guideline | confidence | UD | call script
 5. Taps Approve (email or dashboard)
 6. Dashboard updates realtime → "Calling patient"
-7. Patient answers → voice agent in es/vi/en
+7. Patient answers → voice agent in en/ar-TN/fr/zh
 8. Patient books slot on /p/{token} or via voice
 9. Dashboard shows "Follow-up booked"
 ```
