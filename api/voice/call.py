@@ -1,6 +1,11 @@
+import logging
+import os
+
 from api.db import cases as case_repo
 from api.db.audit import audit_log
 from api.voice.twilio_client import build_outbound_twiml, get_twilio_client
+
+log = logging.getLogger("radrelay.voice.call")
 
 
 class SignoffNotApprovedError(RuntimeError):
@@ -22,6 +27,9 @@ def place_patient_call(
 ) -> dict:
     status = case_repo.get_case_signoff_status(case_id)
     if status != "approved":
+        log.warning(
+            "call_blocked case_id=%s status=%r", case_id, status
+        )
         try:
             audit_log(
                 case_id,
@@ -30,16 +38,22 @@ def place_patient_call(
                 details={"reason": "signoff_not_approved", "status": status},
             )
         except Exception:
-            # Audit failure must never mask the gate. Re-raise the gate error.
             pass
         raise SignoffNotApprovedError(case_id, status)
 
-    import os
     from_number = os.environ.get("TWILIO_PHONE_NUMBER")
     twiml = build_outbound_twiml(case_id)
+    log.info(
+        "dialing case_id=%s to=%s from=%s twiml=%s",
+        case_id,
+        phone,
+        from_number,
+        twiml,
+    )
     twilio_call = get_twilio_client().calls.create(
         to=phone, from_=from_number, twiml=twiml
     )
+    log.info("twilio_call_created sid=%s case_id=%s", twilio_call.sid, case_id)
 
     audit_log(
         case_id,

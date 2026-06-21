@@ -18,10 +18,13 @@ class CaseContext:
     offered_slot: str     # synthetic; e.g. "Tue Jul 7 at 10:00 AM"
 
 
-# Deepgram Voice Agent supports Anthropic as a managed think provider. Default
-# to Haiku for voice latency — Sonnet is the orchestrator's job (Vedant's lane).
-# Override via DEEPGRAM_AGENT_THINK_MODEL if Deepgram's allowlist changes.
-DEFAULT_THINK_MODEL = "claude-3-5-haiku-latest"
+# Deepgram Voice Agent's managed Anthropic provider. Confirmed working
+# end-to-end on our account: claude-haiku-4-5 (no -latest alias). Deepgram's
+# formal OpenAPI enum also lists claude-sonnet-4-20250514; their prose docs
+# additionally mention claude-sonnet-4-5 / claude-sonnet-4-6 but the -latest
+# aliases (e.g. claude-3-5-haiku-latest) are rejected with INVALID_SETTINGS
+# even when documented. Override via DEEPGRAM_AGENT_THINK_MODEL.
+DEFAULT_THINK_MODEL = "claude-haiku-4-5"
 
 # Listen models — nova-3 handles en/es; vi falls back to nova-2.
 _LISTEN_MODEL_BY_LANG = {"en": "nova-3", "es": "nova-3", "vi": "nova-2"}

@@ -89,11 +89,29 @@ async def media_stream(ws: WebSocket) -> None:
     """Twilio <Connect><Stream> bidirectional websocket. Bridges to Deepgram
     Voice Agent. The caseId comes from the start event's customParameters.
     """
+    client = ws.client.host if ws.client else "?"
+    headers = {k.decode(): v.decode() for k, v in ws.scope.get("headers", [])}
+    log.info(
+        "media_stream WS incoming client=%s ua=%r origin=%r",
+        client,
+        headers.get("user-agent"),
+        headers.get("origin"),
+    )
     await ws.accept()
+    log.info("media_stream WS accepted; awaiting Twilio start event")
     try:
-        await run_bridge(ws, _case_loader, _persist_outcome)
+        state = await run_bridge(ws, _case_loader, _persist_outcome)
+        log.info(
+            "media_stream WS bridge finished case_id=%s outcome=%s "
+            "booked_slot=%r transcript_turns=%d stopped=%s",
+            state.case_id,
+            state.call_outcome,
+            state.booked_slot,
+            len(state.transcript),
+            state.stopped,
+        )
     except WebSocketDisconnect:
-        pass
+        log.info("media_stream WS client disconnected")
     except Exception:
         log.exception("media_stream bridge failed")
     finally:
