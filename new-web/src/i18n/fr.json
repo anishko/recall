@@ -1,0 +1,60 @@
+{
+  "patient": {
+    "hi": "Bonjour",
+    "hero_subtitle": "Votre scanner a montré quelque chose que nous voulons suivre. Voici ce que cela signifie.",
+    "what_we_found": "Ce que nous avons trouvé",
+    "show_doctor_view": "Montrez-moi ce que voit le médecin",
+    "hide_doctor_view": "Masquer la vue du médecin",
+    "what_this_means": "Ce que ça signifie",
+    "what_happens_next": "Qu'est-ce qui se passe ensuite",
+    "questions": "Des questions ?",
+    "call_us": "Rappelez-nous : (555) RE-CALL",
+    "email_nurse": "Contactez une infirmière : nurse@recall.com",
+    "share_family": "Partager avec la famille",
+    "copy_family_link": "Copier le lien famille",
+    "text_to_someone": "Envoyer par SMS",
+    "book_now": "Choisir un créneau",
+    "disclaimer": "Ceci n'est pas un diagnostic médical. Parlez toujours à votre médecin.",
+    "powered_by": "Propulsé par Recall",
+    "link_expired": "Ce lien a expiré. Appelez-nous au (555) RE-CALL.",
+    "not_alarmist": "La plupart des taches de ce type ne sont pas graves. Nous voulons regarder de plus près pour en être sûrs.",
+    "not_diagnosis": "Ce n'est pas un diagnostic de cancer. C'est un résultat qui nécessite un suivi.",
+    "early_detection": "Détecter les choses tôt donne les meilleurs résultats — c'est pourquoi nous avons appelé.",
+    "viewing_as_family": "Vous consultez ceci en tant que membre de la famille de",
+    "they_can_book": "Ils peuvent prendre rendez-vous ici :",
+    "help_them_book": "Je veux les aider à prendre rendez-vous"
+  },
+  "scheduling": {
+    "title": "Choisissez un créneau pour votre suivi",
+    "confirm": "Confirmer le rendez-vous",
+    "booked": "Vous êtes réservé pour le",
+    "reminder": "Nous vous enverrons un rappel par SMS.",
+    "no_slots": "Aucun créneau disponible. Appelez le (555) RE-CALL."
+  },
+  "sendToFamily": {
+    "title": "Envoyer à un membre de la famille",
+    "phone_label": "Numéro de téléphone du membre de la famille",
+    "phone_placeholder": "+1 (555) 000-0000",
+    "name_label": "Son prénom (optionnel)",
+    "name_placeholder": "ex. Marie",
+    "language_label": "Langue préférée",
+    "consent": "J'ai la permission de partager le numéro de cette personne",
+    "send": "Envoyer par SMS",
+    "sent": "Envoyé à",
+    "sent_suffix": "Ils recevront un SMS en",
+    "rate_limit": "Vous avez atteint la limite d'envoi pour aujourd'hui. Réessayez demain.",
+    "mocked_note": "(simulé)"
+  },
+  "lang": {
+    "en": "EN",
+    "ar-TN": "ع",
+    "fr": "FR",
+    "zh": "中文"
+  },
+  "urgency": {
+    "URGENT": "Urgent",
+    "SHORT": "Intervalle court",
+    "ROUTINE": "Routine",
+    "NO_FU": "Pas de suivi"
+  }
+}
