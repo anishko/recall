@@ -1,4 +1,4 @@
-# RadRelay — CLAUDE.md
+# Recall — CLAUDE.md
 
 Cal Hacks AI 2026 (UC Berkeley), 24hr build. Read this fully before writing code.
 
