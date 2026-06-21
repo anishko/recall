@@ -52,8 +52,8 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-display text-2xl" style={{ color: "var(--color-text)" }}>
-            Review queue
+          <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>
+            Review Queue
           </h1>
           <p className="text-sm mt-0.5" style={{ color: "var(--color-muted)" }}>
             {isLoading
@@ -86,16 +86,8 @@ export default function DashboardPage() {
             className="rounded-full px-3 py-1.5 text-xs font-medium transition-all"
             style={
               filter === key
-                ? {
-                    background: "var(--color-primary)",
-                    color: "var(--color-primary-fg)",
-                    border: "1px solid var(--color-primary)",
-                  }
-                : {
-                    background: "var(--color-surface)",
-                    color: "var(--color-muted)",
-                    border: "1px solid var(--color-border)",
-                  }
+                ? { background: "var(--color-primary)", color: "var(--color-primary-fg)" }
+                : { background: "var(--color-surface-2)", color: "var(--color-muted)" }
             }
           >
             {label}

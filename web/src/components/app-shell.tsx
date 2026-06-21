@@ -33,6 +33,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </span>
             </span>
           </Link>
+          <nav className="ml-4 hidden items-center gap-1 sm:flex">
+            <Link
+              href="/"
+              className="rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Cases
+            </Link>
+            <Link
+              href="/upload"
+              className="rounded-md px-2.5 py-1.5 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Upload
+            </Link>
+          </nav>
           <div className="ml-auto flex items-center gap-2 text-xs">
             <span className="hidden rounded-full border bg-card px-2.5 py-1 font-medium text-muted-foreground sm:inline">
               Demo data

@@ -3,8 +3,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Phone, PhoneOff, X } from "lucide-react";
 import type { Case } from "@/lib/types";
-import { SectionVisibilityToggle } from "./SectionVisibilityToggle";
-import { useSectionVisibility } from "@/hooks/useSectionVisibility";
 
 type CallState = "ringing" | "connected" | "talking" | "scheduled" | "ended";
 
@@ -39,7 +37,6 @@ const LANG_LABELS: Record<string, string> = {
 export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
   const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
-  const transcriptToggle = useSectionVisibility("call_transcript", 0);
 
   useEffect(() => {
     const timers: ReturnType<typeof setTimeout>[] = [];
@@ -119,35 +116,26 @@ export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
           )}
         </div>
 
-        {/* Transcript — hidden by default (toggle 0/1) */}
+        {/* Transcript */}
         {transcriptLines.length > 0 && (
-          <div className="space-y-2">
-            <SectionVisibilityToggle
-              label="Live transcript"
-              visible={transcriptToggle.visible}
-              onChange={transcriptToggle.setVisible}
-            />
-            {transcriptToggle.isShown && (
-              <div
-                className="rounded-xl p-3 max-h-28 overflow-y-auto space-y-1"
-                style={{
-                  background: "var(--color-surface-2)",
-                  border: "1px solid var(--color-border)",
-                }}
+          <div
+            className="rounded-xl p-3 max-h-28 overflow-y-auto space-y-1"
+            style={{
+              background: "var(--color-surface-2)",
+              border: "1px solid var(--color-border)",
+            }}
+          >
+            {transcriptLines.map((line, i) => (
+              <motion.p
+                key={i}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-xs font-mono leading-relaxed"
+                style={{ color: "var(--color-muted)" }}
               >
-                {transcriptLines.map((line, i) => (
-                  <motion.p
-                    key={i}
-                    initial={{ opacity: 0, y: 4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-xs font-mono leading-relaxed"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    {line}
-                  </motion.p>
-                ))}
-              </div>
-            )}
+                {line}
+              </motion.p>
+            ))}
           </div>
         )}
       </div>

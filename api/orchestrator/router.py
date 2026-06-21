@@ -163,11 +163,15 @@ def patient_family(req: FamilyShareRequest, token: str = Query(...)) -> dict:
     except Exception as e:
         raise HTTPException(status_code=401, detail="Invalid link") from e
 
-    case_repo.record_family_contact(case_id, req.family_phone)
+    try:
+        case_repo.record_family_contact(case_id, req.family_phone)
+    except Exception:
+        log.exception("family_contact_persist_failed case=%s", case_id)
+
     family_token = make_patient_token(case_id)
     audit_log(case_id, "patient", "family_share", {"phone_last4": req.family_phone[-4:]})
     return {
-        "family_url": f"{WEB_BASE()}/p/{family_token}",
+        "family_url": f"{WEB_BASE()}/p/{family_token}/family",
         "status": "shared",
     }
 

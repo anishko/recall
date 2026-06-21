@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCase } from "@/lib/cases";
 import { mapRowToCase } from "@/lib/caseAdapter";
-import { buildEvaluationFromDb } from "@/lib/clinicalEvaluation";
 import { MOCK_CASES } from "@/lib/mockCases";
 
 export async function GET(
@@ -11,12 +10,7 @@ export async function GET(
   const { id } = await params;
 
   const row = await getCase(id);
-  if (row) {
-    return NextResponse.json({
-      ...mapRowToCase(row),
-      evaluation: buildEvaluationFromDb(row),
-    });
-  }
+  if (row) return NextResponse.json(mapRowToCase(row));
 
   // Mock fallback
   const mock = MOCK_CASES.find((c) => c.id === id);

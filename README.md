@@ -1,4 +1,4 @@
-# RadRelay
+# Recall
 
 Voice agent that closes the radiology follow-up gap. Decision support only; a
 radiologist signs off before any patient is contacted.

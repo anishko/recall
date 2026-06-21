@@ -50,7 +50,11 @@ Respond with ONLY valid JSON matching the requested schema. No markdown fences."
 PARSE_SYSTEM = """You are a radiology report parser for RadRelay decision support.
 Extract structured data from radiology report PDFs. Use only information explicitly stated in the report.
 If patient phone is not in the report, use "+15555550100" as placeholder.
-Infer language_preference (en|es|vi) from report language or stated preference; default "en".
+Infer language_preference (en|ar-TN|fr|zh) from report language or stated preference; default "en".
+  en  = English
+  ar-TN = Tunisian Arabic (Darija / Modern Standard Arabic used in Tunisia)
+  fr  = French
+  zh  = Mandarin Chinese (Simplified)
 For smoking_status use never|former|current when stated, else omit.
 report_date as ISO 8601 date string if present, else use today's date.
 
@@ -59,7 +63,12 @@ Respond with ONLY valid JSON matching the requested schema. No markdown fences."
 DRAFT_SCRIPT_SYSTEM = """You draft patient phone scripts for RadRelay follow-up calls.
 You receive an Understandable Diagnosis (UD) in plain language — use it as the core message.
 6th-grade reading level, empathetic, non-alarming, one clear action (book a follow-up scan).
-Write in the requested language (en, es, or vi). Keep under 120 words.
+Write in the requested language:
+  en    = English
+  ar-TN = Tunisian Arabic (Darija, accessible to Tunisian patients; use Modern Standard Arabic if Darija is unclear)
+  fr    = French
+  zh    = Mandarin Chinese (Simplified)
+Keep under 120 words.
 Respond with ONLY the script text — no JSON, no quotes wrapper."""
 
 UD_SYSTEM = """You write an "Understandable Diagnosis" (UD) for patients and families reading their radiology results.
@@ -77,7 +86,11 @@ Your job:
 4. State the recommended next step in one clear action.
 
 Rules:
-- Write in the patient's language (en, es, or vi).
+- Write in the patient's language:
+    en    = English
+    ar-TN = Tunisian Arabic (Darija / Modern Standard Arabic used in Tunisia)
+    fr    = French
+    zh    = Mandarin Chinese (Simplified)
 - Do NOT contradict the radiologist's report.
 - Do NOT say the patient has cancer or any definitive disease unless the report explicitly states it.
 - If the report is ambiguous, say so honestly.

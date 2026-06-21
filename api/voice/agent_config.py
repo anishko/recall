@@ -26,44 +26,76 @@ class CaseContext:
 # even when documented. Override via DEEPGRAM_AGENT_THINK_MODEL.
 DEFAULT_THINK_MODEL = "claude-haiku-4-5"
 
-# Listen models — nova-3 handles en/es; vi falls back to nova-2.
-_LISTEN_MODEL_BY_LANG = {"en": "nova-3", "es": "nova-3", "vi": "nova-2"}
+# Listen (STT) model per language. nova-3 is English-only today; nova-2 is the
+# multilingual model that handles fr/vi (and es works under either).
+_LISTEN_MODEL_BY_LANG = {
+    "en": "nova-3",
+    "es": "nova-3",
+    "fr": "nova-2",
+    "vi": "nova-2",
+}
 
-# Speak (TTS) voice per language. en wired first; es/vi placeholders kept so
-# adding them later is a data-only change.
+# Speak (TTS) voice per language. Aura-2 has native en/es/fr voices; vi has no
+# Deepgram voice yet — falls back to English (replace when Deepgram ships one).
 _SPEAK_MODEL_BY_LANG = {
     "en": "aura-2-thalia-en",
     "es": "aura-2-celeste-es",
+    "fr": "aura-2-agathe-fr",
     "vi": "aura-2-thalia-en",  # TODO: replace when Deepgram ships a vi voice.
+}
+
+# Human-readable language name for the system prompt's "respond in X" hint.
+_LANG_NAME_BY_CODE = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French (Français)",
+    "vi": "Vietnamese",
+}
+
+# Per-language opening line. Must be in the target language because the TTS
+# voice is language-specific — feeding English text to a French voice produces
+# French-accented gibberish. New languages: add a translation here.
+_GREETING_TEMPLATE_BY_LANG = {
+    "en": (
+        "Hi {name}, this is Recall calling on behalf of your radiologist "
+        "about a follow-up from your recent imaging. Do you have a couple of "
+        "minutes?"
+    ),
+    "fr": (
+        "Bonjour {name}, c'est Recall qui vous appelle de la part de votre "
+        "radiologue au sujet d'un suivi de votre récente imagerie. Avez-vous "
+        "quelques minutes ?"
+    ),
 }
 
 
 def _system_prompt(case: CaseContext) -> str:
+    lang_name = _LANG_NAME_BY_CODE.get(case.patient_language, "English")
     return (
-        "You are Recall, calling a patient on behalf of their radiologist. "
-        "Decision support only — no diagnosis, no treatment advice, no "
-        "speculation beyond the script. Your role is to answer questions about what is discovered but nothing new. If asked about diagnosis you cannot "
-        "answer from the script, say the radiologist will follow up.\n\n"
-        "STYLE — critical:\n"
-        "- Keep every reply SHORT: 1–2 sentences, under 25 words when possible.\n"
-        "- One idea per turn. No filler, no repetition, no long intros.\n"
-        "- Phone call, not a lecture. Get to the point fast.\n"
-        "- After the patient answers, move to the next step immediately.\n\n"
-        f"Patient: {case.patient_name}.\n"
-        f"Offer only this slot: {case.offered_slot}.\n"
-        "If they agree, call book_followup with that exact slot. If they "
-        "decline or want another time, say the office will call back and end "
-        "politely.\n\n"
-        "Radiologist script (hit the key points briefly; do not read verbatim):\n"
+        "You are Recall, a friendly assistant calling a patient on behalf of "
+        f"their radiologist. This is decision support only — never give a "
+        "diagnosis, never speculate beyond the script, never discuss treatment. "
+        "If the patient asks medical questions you cannot answer from the "
+        "script, tell them their radiologist will follow up.\n\n"
+        f"IMPORTANT: Speak to the patient ONLY in {lang_name}. Every response "
+        f"you generate must be in {lang_name}. Do not switch languages even if "
+        "the patient does.\n\n"
+        f"Patient name: {case.patient_name}.\n"
+        f"Offer this specific follow-up slot and only this slot: "
+        f"{case.offered_slot}.\n"
+        "When the patient agrees, call the book_followup function with that "
+        "exact slot string. If they decline or ask to reschedule, tell them "
+        "the office will call back, and end the call politely.\n\n"
+        "Script from the radiologist (paraphrase warmly, stay faithful):\n"
         f"{case.patient_script}"
     )
 
 
 def _greeting(case: CaseContext) -> str:
-    return (
-        f"Hi {case.patient_name}, this is the Recall Agent calling about your imaging follow-up. "
-        "Got a minute?"
+    template = _GREETING_TEMPLATE_BY_LANG.get(
+        case.patient_language, _GREETING_TEMPLATE_BY_LANG["en"]
     )
+    return template.format(name=case.patient_name)
 
 
 def build_settings(case: CaseContext) -> dict:
@@ -84,6 +116,11 @@ def build_settings(case: CaseContext) -> dict:
                 "provider": {
                     "type": "deepgram",
                     "model": _LISTEN_MODEL_BY_LANG.get(lang, "nova-3"),
+                    # Pin the STT language explicitly. nova-2 (used for fr/vi)
+                    # defaults to English without this — transcribing French
+                    # audio as word-salad English. Deepgram's docs are clear:
+                    # agent.language does NOT propagate to listen.provider.
+                    "language": lang,
                 }
             },
             "think": {
