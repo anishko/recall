@@ -1,8 +1,7 @@
 "use client";
 import { use, useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { MOCK_PATIENT_VIEWS } from "@/lib/mockCases";
-import type { Locale } from "@/lib/types";
+import type { Locale, PatientView } from "@/lib/types";
 import { FamilyViewBanner } from "@/components/FamilyViewBanner";
 import { MeaningCard } from "@/components/MeaningCard";
 import { LangSwitcher } from "@/components/LangSwitcher";
@@ -10,17 +9,36 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { useTranslation } from "@/hooks/useTranslation";
 
-export default function FamilyPage({ params }: { params: Promise<{ token: string }> }) {
+export default function FamilyPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = use(params);
-  const view = MOCK_PATIENT_VIEWS[token];
 
+  const [view, setView] = useState<PatientView | null>(null);
   const [locale, setLocale] = useState<Locale>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("recall_locale") as Locale) ?? view?.preferredLanguage ?? "en";
+      return (localStorage.getItem("recall_locale") as Locale) ?? "en";
     }
-    return view?.preferredLanguage ?? "en";
+    return "en";
   });
   const { t } = useTranslation(locale);
+
+  useEffect(() => {
+    fetch(`/api/patient/${encodeURIComponent(token)}?view=family`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PatientView | null) => {
+        if (!data) return;
+        setView(data);
+        const stored =
+          typeof window !== "undefined"
+            ? (localStorage.getItem("recall_locale") as Locale | null)
+            : null;
+        setLocale(stored ?? data.preferredLanguage ?? "en");
+      })
+      .catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     document.documentElement.dir = locale === "ar-TN" ? "rtl" : "ltr";
@@ -30,7 +48,10 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
 
   if (!view) {
     return (
-      <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--color-bg)" }}>
+      <main
+        className="min-h-dvh flex items-center justify-center"
+        style={{ background: "var(--color-bg)" }}
+      >
         <p style={{ color: "var(--color-muted)" }}>{t("patient.link_expired")}</p>
       </main>
     );
@@ -44,7 +65,6 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
       lang={locale}
       style={{ background: "var(--color-bg)", minHeight: "100dvh" }}
     >
-      {/* Header */}
       <header
         className="sticky top-0 z-30 flex items-center justify-between px-4 py-3"
         style={{
@@ -57,11 +77,18 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
             className="h-7 w-7 rounded-lg flex items-center justify-center"
             style={{ background: "var(--color-primary)" }}
           >
-            <svg viewBox="0 0 24 24" className="h-4 w-4 fill-none stroke-white stroke-2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-4 w-4 fill-none stroke-white stroke-2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
           </div>
-          <span className="text-sm font-bold" style={{ color: "var(--color-text)" }}>Recall</span>
+          <span className="text-sm font-bold" style={{ color: "var(--color-text)" }}>
+            Recall
+          </span>
         </div>
         <div className="flex items-center gap-2">
           <LangSwitcher value={locale} onChange={setLocale} />
@@ -69,7 +96,10 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
         </div>
       </header>
 
-      <main id="main-content" className="mx-auto max-w-xl px-4 py-6 space-y-4 pb-10">
+      <main
+        id="main-content"
+        className="mx-auto max-w-xl px-4 py-6 space-y-4 pb-10"
+      >
         <FamilyViewBanner
           patientFirstName={view.patientFirstName}
           bookingLink={`/p/${token}/scheduling`}
@@ -77,7 +107,6 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
           theyCanBookLabel={t("patient.they_can_book")}
         />
 
-        {/* Summary card */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -89,7 +118,10 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
               <p className="text-sm" style={{ color: "var(--color-muted)" }}>
                 {view.patientFirstName} · {view.patientAgeRange}
               </p>
-              <h1 className="text-lg font-bold mt-0.5" style={{ color: "var(--color-text)" }}>
+              <h1
+                className="text-lg font-bold mt-0.5"
+                style={{ color: "var(--color-text)" }}
+              >
                 {exp.findingSimple}
               </h1>
             </div>
@@ -100,7 +132,11 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
 
           <div className="space-y-2">
             {[exp.paragraph1, exp.paragraph2, exp.paragraph3].map((p, i) => (
-              <p key={i} className="text-sm leading-relaxed" style={{ color: "var(--color-text)", opacity: 0.8 }}>
+              <p
+                key={i}
+                className="text-sm leading-relaxed"
+                style={{ color: "var(--color-text)", opacity: 0.8 }}
+              >
                 {p}
               </p>
             ))}
@@ -110,10 +146,14 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
             className="rounded-xl p-3"
             style={{
               background: "var(--color-routine-bg)",
-              border: "1px solid color-mix(in oklch, var(--color-primary) 20%, transparent)",
+              border:
+                "1px solid color-mix(in oklch, var(--color-primary) 20%, transparent)",
             }}
           >
-            <p className="text-xs font-semibold mb-0.5" style={{ color: "var(--color-primary)" }}>
+            <p
+              className="text-xs font-semibold mb-0.5"
+              style={{ color: "var(--color-primary)" }}
+            >
               Next step
             </p>
             <p className="text-sm" style={{ color: "var(--color-text)" }}>
@@ -130,7 +170,6 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
           heading={t("patient.what_this_means")}
         />
 
-        {/* Book CTA */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -146,8 +185,12 @@ export default function FamilyPage({ params }: { params: Promise<{ token: string
         </motion.div>
 
         <footer className="text-center pb-4">
-          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>{t("patient.disclaimer")}</p>
-          <p className="text-xs mt-1" style={{ color: "var(--color-muted-2)" }}>{t("patient.powered_by")}</p>
+          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>
+            {t("patient.disclaimer")}
+          </p>
+          <p className="text-xs mt-1" style={{ color: "var(--color-muted-2)" }}>
+            {t("patient.powered_by")}
+          </p>
         </footer>
       </main>
     </div>

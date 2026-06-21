@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
-import { LayoutDashboard, BarChart3, FileText } from "lucide-react";
+import { LayoutDashboard, BarChart3, FileText, Upload } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Queue", icon: LayoutDashboard },
   { href: "/dashboard/eval", label: "Eval", icon: BarChart3 },
   { href: "/dashboard/audit", label: "Audit", icon: FileText },
+  { href: "/upload", label: "Upload Report", icon: Upload },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {

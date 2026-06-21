@@ -22,7 +22,20 @@ export default function EvalPage() {
   return (
     <div className="p-6 space-y-6" style={{ background: "var(--color-bg)", minHeight: "100%" }}>
       <div>
-        <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>Eval Metrics</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>Eval Metrics</h1>
+          <span
+            className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide"
+            style={{
+              background: "color-mix(in oklch, var(--color-short) 12%, transparent)",
+              color: "var(--color-short)",
+              border: "1px solid color-mix(in oklch, var(--color-short) 30%, transparent)",
+            }}
+            title="All metrics on this page are demo data"
+          >
+            all demo data
+          </span>
+        </div>
         <p className="text-sm mt-0.5" style={{ color: "var(--color-muted)" }}>
           Powered by Arize Phoenix · Last updated: just now
         </p>

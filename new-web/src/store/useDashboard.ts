@@ -1,14 +1,31 @@
 "use client";
 import { create } from "zustand";
 import type { Case, UrgencyTier, CaseStatus } from "@/lib/types";
-import { MOCK_CASES } from "@/lib/mockCases";
 
 type Filter = "all" | "urgent" | "today" | "low_confidence" | "flagged";
 
+const URGENCY_ORDER: Record<UrgencyTier, number> = {
+  URGENT: 0,
+  SHORT: 1,
+  ROUTINE: 2,
+  NO_FU: 3,
+};
+
+function sortCases(cases: Case[]): Case[] {
+  return [...cases].sort(
+    (a, b) =>
+      URGENCY_ORDER[a.urgency] - URGENCY_ORDER[b.urgency] ||
+      a.arrivedAt.localeCompare(b.arrivedAt),
+  );
+}
+
 interface DashboardState {
   cases: Case[];
+  isLoading: boolean;
   filter: Filter;
   newCaseIds: Set<string>;
+
+  loadCases: () => Promise<void>;
   setFilter: (f: Filter) => void;
   addCase: (c: Case) => void;
   updateCase: (id: string, patch: Partial<Case>) => void;
@@ -19,17 +36,23 @@ interface DashboardState {
 }
 
 export const useDashboard = create<DashboardState>((set, get) => ({
-  cases: [...MOCK_CASES].sort((a, b) => {
-    const order: Record<UrgencyTier, number> = {
-      URGENT: 0,
-      SHORT: 1,
-      ROUTINE: 2,
-      NO_FU: 3,
-    };
-    return order[a.urgency] - order[b.urgency] || a.arrivedAt.localeCompare(b.arrivedAt);
-  }),
+  cases: [],
+  isLoading: true,
   filter: "all",
   newCaseIds: new Set(),
+
+  loadCases: async () => {
+    set({ isLoading: true });
+    try {
+      const res = await fetch("/api/cases");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: Case[] = await res.json();
+      set({ cases: sortCases(data), isLoading: false });
+    } catch (err) {
+      console.warn("loadCases failed, keeping current state", err);
+      set({ isLoading: false });
+    }
+  },
 
   setFilter: (filter) => set({ filter }),
 
@@ -37,13 +60,7 @@ export const useDashboard = create<DashboardState>((set, get) => ({
     set((s) => {
       const newCaseIds = new Set(s.newCaseIds);
       newCaseIds.add(c.id);
-      const order: Record<UrgencyTier, number> = {
-        URGENT: 0, SHORT: 1, ROUTINE: 2, NO_FU: 3,
-      };
-      const cases = [c, ...s.cases].sort(
-        (a, b) => order[a.urgency] - order[b.urgency] || a.arrivedAt.localeCompare(b.arrivedAt)
-      );
-      return { cases, newCaseIds };
+      return { cases: sortCases([c, ...s.cases]), newCaseIds };
     }),
 
   updateCase: (id, patch) =>
@@ -54,14 +71,14 @@ export const useDashboard = create<DashboardState>((set, get) => ({
   approveCase: (id) =>
     set((s) => ({
       cases: s.cases.map((c) =>
-        c.id === id ? { ...c, status: "approved" as CaseStatus } : c
+        c.id === id ? { ...c, status: "approved" as CaseStatus } : c,
       ),
     })),
 
   flagCase: (id) =>
     set((s) => ({
       cases: s.cases.map((c) =>
-        c.id === id ? { ...c, status: "escalated" as CaseStatus } : c
+        c.id === id ? { ...c, status: "escalated" as CaseStatus } : c,
       ),
     })),
 
@@ -80,7 +97,7 @@ export const useDashboard = create<DashboardState>((set, get) => ({
         return cases.filter((c) => c.urgency === "URGENT");
       case "today":
         return cases.filter(
-          (c) => new Date(c.arrivedAt).toDateString() === today
+          (c) => new Date(c.arrivedAt).toDateString() === today,
         );
       case "low_confidence":
         return cases.filter((c) => c.confidence < 0.85);

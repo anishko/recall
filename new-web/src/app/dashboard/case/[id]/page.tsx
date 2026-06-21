@@ -1,8 +1,16 @@
 "use client";
-import { use, useState } from "react";
-import { useRouter } from "next/navigation";
+import { use, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Clock, User, Globe, AlertTriangle, CheckCircle, ExternalLink } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock,
+  User,
+  Globe,
+  AlertTriangle,
+  CheckCircle,
+  ExternalLink,
+} from "lucide-react";
 import Link from "next/link";
 import { useDashboard } from "@/store/useDashboard";
 import { SliceCarousel } from "@/components/SliceCarousel";
@@ -11,10 +19,15 @@ import { ApprovePanel } from "@/components/ApprovePanel";
 import { LiveCallStrip } from "@/components/LiveCallStrip";
 import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
+import { MockBadge } from "@/components/MockBadge";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import type { Case } from "@/lib/types";
 
 const LANG_LABELS: Record<string, string> = {
-  en: "English", "ar-TN": "Tunisian Arabic", fr: "French", zh: "Chinese"
+  en: "English",
+  "ar-TN": "Tunisian Arabic",
+  fr: "French",
+  zh: "Chinese",
 };
 
 function timeAgo(iso: string) {
@@ -24,13 +37,53 @@ function timeAgo(iso: string) {
   return `${Math.floor(mins / 60)}h ago`;
 }
 
-export default function CaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function CaseDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
   const { cases, approveCase, flagCase } = useDashboard();
-  const c = cases.find((c) => c.id === id);
-  const [showCallStrip, setShowCallStrip] = useState(false);
-  const [activeTab, setActiveTab] = useState<"imaging" | "report" | "patient">("imaging");
+  const storeCase = cases.find((c) => c.id === id);
+
+  // If case not in store (direct URL navigation), fetch it individually
+  const [fetchedCase, setFetchedCase] = useState<Case | null>(null);
+  const [fetchLoading, setFetchLoading] = useState(false);
+
+  useEffect(() => {
+    if (storeCase || fetchedCase || fetchLoading) return;
+    setFetchLoading(true);
+    fetch(`/api/cases/${id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && !data.error) setFetchedCase(data as Case);
+      })
+      .catch(() => {})
+      .finally(() => setFetchLoading(false));
+  }, [id, storeCase, fetchedCase, fetchLoading]);
+
+  const c = storeCase ?? fetchedCase;
+
+  // Trigger LiveCallStrip if landing from email ?approved=1
+  const initiallyApproved = searchParams.get("approved") === "1";
+  const [showCallStrip, setShowCallStrip] = useState(initiallyApproved);
+  const [activeTab, setActiveTab] = useState<"imaging" | "report" | "patient">(
+    "imaging",
+  );
+
+  if (fetchLoading && !c) {
+    return (
+      <div className="flex items-center justify-center h-full p-12">
+        <div
+          className="h-8 w-8 rounded-full border-2 border-t-transparent animate-spin"
+          style={{ borderColor: "var(--color-primary)" }}
+        />
+      </div>
+    );
+  }
 
   if (!c) {
     return (
@@ -47,16 +100,26 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  function handleApprove() {
+  async function handleApprove() {
     if (!c) return;
-    approveCase(c.id);
-    setShowCallStrip(true);
+    try {
+      const res = await fetch(`/api/cases/${c.id}/approve`, { method: "POST" });
+      if (!res.ok) return;
+      approveCase(c.id);
+      setShowCallStrip(true);
+    } catch {
+      // Backend unreachable — do not update local state (Hard Invariant #1)
+    }
   }
 
-  function handleFlag(note: string) {
+  async function handleFlag(note: string) {
     if (!c) return;
-    flagCase(c.id);
-    console.log("Flagged with note:", note);
+    const res = await fetch(`/api/cases/${c.id}/flag`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ note }),
+    }).catch(() => null);
+    if (res?.ok) flagCase(c.id);
   }
 
   const isHighRisk = c.confidence < 0.85 || c.urgency === "URGENT";
@@ -81,9 +144,16 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
           Back to queue
         </button>
         <span style={{ color: "var(--color-border)" }}>/</span>
-        <span className="text-sm font-semibold font-mono" style={{ color: "var(--color-text)" }}>{c.id}</span>
+        <span
+          className="text-sm font-semibold font-mono"
+          style={{ color: "var(--color-text)" }}
+        >
+          {c.id}
+        </span>
         <span style={{ color: "var(--color-muted)" }}>·</span>
-        <span className="text-sm" style={{ color: "var(--color-muted)" }}>{c.patientName}</span>
+        <span className="text-sm" style={{ color: "var(--color-muted)" }}>
+          {c.patientName}
+        </span>
         <UrgencyBadge tier={c.urgency} size="sm" className="ml-1" />
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs" style={{ color: "var(--color-muted-2)" }}>
@@ -93,41 +163,70 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </div>
 
-      {/* Risk banner for high-risk or low-confidence */}
+      {/* Risk banner */}
       {isHighRisk && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex items-center gap-3 px-6 py-2.5 text-xs font-medium"
           style={{
-            background: c.urgency === "URGENT" ? "var(--color-urgent-bg)" : "var(--color-short-bg)",
+            background:
+              c.urgency === "URGENT"
+                ? "var(--color-urgent-bg)"
+                : "var(--color-short-bg)",
             borderBottom: `1px solid color-mix(in oklch, ${c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)"} 30%, transparent)`,
           }}
         >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" style={{ color: c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)" }} />
-          <span style={{ color: c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)" }}>
+          <AlertTriangle
+            className="h-3.5 w-3.5 shrink-0"
+            style={{
+              color:
+                c.urgency === "URGENT"
+                  ? "var(--color-urgent)"
+                  : "var(--color-short)",
+            }}
+          />
+          <span
+            style={{
+              color:
+                c.urgency === "URGENT"
+                  ? "var(--color-urgent)"
+                  : "var(--color-short)",
+            }}
+          >
             {c.urgency === "URGENT"
-              ? `URGENT — Lung-RADS 4B. Requires PET-CT + pulmonology referral within ${c.recommendedTimeframe}.`
-              : `Confidence below threshold (${Math.round(c.confidence * 100)}%). Human review required before approval.`}
+              ? `URGENT — Requires action within ${c.recommendedTimeframe}.`
+              : `Confidence ${Math.round(c.confidence * 100)}% — below threshold. Human review required.`}
           </span>
         </motion.div>
       )}
 
       {/* Main grid */}
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-0 min-h-[calc(100vh-120px)]">
-
         {/* Left column */}
         <div className="border-r" style={{ borderColor: "var(--color-border)" }}>
           {/* Tab bar */}
-          <div className="flex border-b px-6" style={{ borderColor: "var(--color-border)", background: "var(--color-surface)" }}>
+          <div
+            className="flex border-b px-6"
+            style={{
+              borderColor: "var(--color-border)",
+              background: "var(--color-surface)",
+            }}
+          >
             {(["imaging", "report", "patient"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 className="px-4 py-3 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors capitalize"
                 style={{
-                  borderColor: activeTab === tab ? "var(--color-primary)" : "transparent",
-                  color: activeTab === tab ? "var(--color-primary)" : "var(--color-muted)",
+                  borderColor:
+                    activeTab === tab
+                      ? "var(--color-primary)"
+                      : "transparent",
+                  color:
+                    activeTab === tab
+                      ? "var(--color-primary)"
+                      : "var(--color-muted)",
                 }}
               >
                 {tab}
@@ -140,11 +239,20 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
               <div className="space-y-4 max-w-xl">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-0.5" style={{ color: "var(--color-muted)" }}>
-                      CT Chest · Axial lung window
-                    </p>
-                    <p className="text-sm font-medium" style={{ color: "var(--color-text)" }}>
-                      {c.slices.length} slices · Source: Radiopaedia T2A-Lung-Cancer
+                    <div className="flex items-center gap-2">
+                      <p
+                        className="text-xs font-semibold uppercase tracking-wide"
+                        style={{ color: "var(--color-muted)" }}
+                      >
+                        CT Chest · Axial lung window
+                      </p>
+                      <MockBadge label="demo imaging" />
+                    </div>
+                    <p
+                      className="text-sm font-medium mt-0.5"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      {c.slices.length} slices · Source: Radiopaedia
                     </p>
                   </div>
                   <a
@@ -158,12 +266,17 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                   </a>
                 </div>
                 <SliceCarousel slices={c.slices} highlight={c.highlight} />
-                {/* Lung-RADS legend */}
                 <div
                   className="rounded-xl p-3 space-y-2"
-                  style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}
+                  style={{
+                    background: "var(--color-surface-2)",
+                    border: "1px solid var(--color-border)",
+                  }}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--color-muted)" }}
+                  >
                     Lung-RADS v2022 classification
                   </p>
                   <div className="grid grid-cols-4 gap-1 text-center">
@@ -171,18 +284,36 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                       { cat: "1", label: "Negative", color: "var(--color-success)" },
                       { cat: "2", label: "Benign", color: "var(--color-routine)" },
                       { cat: "3", label: "Probably benign", color: "var(--color-short)" },
-                      { cat: "4B", label: "Suspicious", color: "var(--color-urgent)", active: true },
+                      {
+                        cat: "4B",
+                        label: "Suspicious",
+                        color: "var(--color-urgent)",
+                        active: true,
+                      },
                     ].map(({ cat, label, color, active }) => (
                       <div
                         key={cat}
                         className="rounded-lg p-1.5 space-y-0.5"
                         style={{
-                          background: active ? `color-mix(in oklch, ${color} 12%, transparent)` : "transparent",
-                          border: active ? `1px solid color-mix(in oklch, ${color} 30%, transparent)` : "1px solid var(--color-border)",
+                          background: active
+                            ? `color-mix(in oklch, ${color} 12%, transparent)`
+                            : "transparent",
+                          border: active
+                            ? `1px solid color-mix(in oklch, ${color} 30%, transparent)`
+                            : "1px solid var(--color-border)",
                         }}
                       >
-                        <p className="text-xs font-bold" style={{ color }}>{cat}</p>
-                        <p className="text-[9px] leading-tight" style={{ color: active ? color : "var(--color-muted-2)" }}>{label}</p>
+                        <p className="text-xs font-bold" style={{ color }}>
+                          {cat}
+                        </p>
+                        <p
+                          className="text-[9px] leading-tight"
+                          style={{
+                            color: active ? color : "var(--color-muted-2)",
+                          }}
+                        >
+                          {label}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -192,25 +323,58 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
 
             {activeTab === "report" && (
               <div className="max-w-2xl space-y-4">
-                {/* Findings summary */}
                 <div
                   className="rounded-xl p-4 space-y-3"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                  }}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--color-muted)" }}
+                  >
                     AI Findings Summary
                   </p>
                   <div className="space-y-2">
                     {[
-                      { key: "Finding", val: c.finding, icon: AlertTriangle, color: "var(--color-urgent)" },
-                      { key: "Guideline", val: c.guideline, icon: CheckCircle, color: "var(--color-routine)" },
-                      { key: "Timeframe", val: c.recommendedTimeframe, icon: Clock, color: "var(--color-primary)" },
+                      {
+                        key: "Finding",
+                        val: c.finding,
+                        icon: AlertTriangle,
+                        color: "var(--color-urgent)",
+                      },
+                      {
+                        key: "Guideline",
+                        val: c.guideline,
+                        icon: CheckCircle,
+                        color: "var(--color-routine)",
+                      },
+                      {
+                        key: "Timeframe",
+                        val: c.recommendedTimeframe,
+                        icon: Clock,
+                        color: "var(--color-primary)",
+                      },
                     ].map(({ key, val, icon: Icon, color }) => (
                       <div key={key} className="flex items-start gap-2.5">
-                        <Icon className="h-3.5 w-3.5 mt-0.5 shrink-0" style={{ color }} />
+                        <Icon
+                          className="h-3.5 w-3.5 mt-0.5 shrink-0"
+                          style={{ color }}
+                        />
                         <div>
-                          <span className="text-[10px] font-semibold uppercase tracking-wide mr-1.5" style={{ color: "var(--color-muted)" }}>{key}</span>
-                          <span className="text-xs" style={{ color: "var(--color-text)" }}>{val}</span>
+                          <span
+                            className="text-[10px] font-semibold uppercase tracking-wide mr-1.5"
+                            style={{ color: "var(--color-muted)" }}
+                          >
+                            {key}
+                          </span>
+                          <span
+                            className="text-xs"
+                            style={{ color: "var(--color-text)" }}
+                          >
+                            {val}
+                          </span>
                         </div>
                       </div>
                     ))}
@@ -222,34 +386,66 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
 
             {activeTab === "patient" && (
               <div className="max-w-xl space-y-4">
-                {/* Patient demographics */}
+                {/* Demographics */}
                 <div
                   className="rounded-xl p-4 space-y-4"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                  }}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--color-muted)" }}
+                  >
                     Patient profile
                   </p>
                   <div className="flex items-center gap-3">
                     <div
                       className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                      style={{ background: "var(--color-routine-bg)", color: "var(--color-routine)" }}
+                      style={{
+                        background: "var(--color-routine-bg)",
+                        color: "var(--color-routine)",
+                      }}
                     >
                       {c.patientInitials}
                     </div>
                     <div>
-                      <p className="font-semibold" style={{ color: "var(--color-text)" }}>{c.patientName}</p>
+                      <p
+                        className="font-semibold"
+                        style={{ color: "var(--color-text)" }}
+                      >
+                        {c.patientName}
+                      </p>
                       <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                        {c.patientAge} years old · {LANG_LABELS[c.patientLanguage] ?? "English"}
+                        {c.patientAge > 0 ? `${c.patientAge} years old · ` : ""}
+                        {LANG_LABELS[c.patientLanguage] ?? "English"}
                       </p>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { icon: User, label: "Age", val: `${c.patientAge}y` },
-                      { icon: Globe, label: "Language", val: LANG_LABELS[c.patientLanguage] ?? "English" },
-                      { icon: Clock, label: "Case age", val: timeAgo(c.arrivedAt) },
-                      { icon: CheckCircle, label: "Status", val: c.status.charAt(0).toUpperCase() + c.status.slice(1) },
+                      {
+                        icon: User,
+                        label: "Age",
+                        val: c.patientAge > 0 ? `${c.patientAge}y` : "—",
+                      },
+                      {
+                        icon: Globe,
+                        label: "Language",
+                        val: LANG_LABELS[c.patientLanguage] ?? "English",
+                      },
+                      {
+                        icon: Clock,
+                        label: "Case age",
+                        val: timeAgo(c.arrivedAt),
+                      },
+                      {
+                        icon: CheckCircle,
+                        label: "Status",
+                        val:
+                          c.status.charAt(0).toUpperCase() + c.status.slice(1),
+                      },
                     ].map(({ icon: Icon, label, val }) => (
                       <div
                         key={label}
@@ -257,10 +453,23 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                         style={{ background: "var(--color-surface-2)" }}
                       >
                         <div className="flex items-center gap-1.5 mb-0.5">
-                          <Icon className="h-3 w-3" style={{ color: "var(--color-muted)" }} />
-                          <p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>{label}</p>
+                          <Icon
+                            className="h-3 w-3"
+                            style={{ color: "var(--color-muted)" }}
+                          />
+                          <p
+                            className="text-[10px] font-semibold uppercase tracking-wide"
+                            style={{ color: "var(--color-muted)" }}
+                          >
+                            {label}
+                          </p>
                         </div>
-                        <p className="text-sm font-semibold" style={{ color: "var(--color-text)" }}>{val}</p>
+                        <p
+                          className="text-sm font-semibold"
+                          style={{ color: "var(--color-text)" }}
+                        >
+                          {val}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -269,13 +478,24 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Patient portal preview */}
                 <div
                   className="rounded-xl p-4 space-y-3"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                  }}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide"
+                    style={{ color: "var(--color-muted)" }}
+                  >
                     Patient portal link
                   </p>
-                  <p className="text-xs leading-relaxed" style={{ color: "var(--color-text)" }}>
-                    The patient will receive this link after approval. It shows a plain-language explanation in their language with appointment scheduling.
+                  <p
+                    className="text-xs leading-relaxed"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    The patient will receive this link after approval. It shows a
+                    plain-language explanation in their language with appointment
+                    scheduling.
                   </p>
                   <Link
                     href="/p/tok_sarah_abc123"
@@ -290,16 +510,28 @@ export default function CaseDetailPage({ params }: { params: Promise<{ id: strin
                 {/* Confidence breakdown */}
                 <div
                   className="rounded-xl p-4 space-y-3"
-                  style={{ background: "var(--color-surface)", border: "1px solid var(--color-border)" }}
+                  style={{
+                    background: "var(--color-surface)",
+                    border: "1px solid var(--color-border)",
+                  }}
                 >
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: "var(--color-muted)" }}>
-                    AI confidence breakdown
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p
+                      className="text-xs font-semibold uppercase tracking-wide"
+                      style={{ color: "var(--color-muted)" }}
+                    >
+                      AI confidence breakdown
+                    </p>
+                    <MockBadge label="sub-scores demo" />
+                  </div>
                   <ConfidenceBar value={c.confidence} />
                   <div className="space-y-2">
                     {Object.entries(c.subScores).map(([k, v]) => (
                       <div key={k} className="flex items-center gap-3">
-                        <span className="text-xs w-24 capitalize shrink-0" style={{ color: "var(--color-muted)" }}>
+                        <span
+                          className="text-xs w-24 capitalize shrink-0"
+                          style={{ color: "var(--color-muted)" }}
+                        >
                           {k.replace(/([A-Z])/g, " $1")}
                         </span>
                         <div className="flex-1">

@@ -51,8 +51,8 @@ tunnel for webhook testing.
   severity, recommended_followup, timeframe_days, confidence (0-1), citation.
   Guidelines embedded in system prompt: Fleischner 2017, BI-RADS, LI-RADS v2018,
   TI-RADS, Lung-RADS v2022. If confidence < 0.85, flag and stop.
-- `draft_patient_script(case_summary, language[en|es|vi], patient_name)` -> script text,
-  6th-grade reading level, empathetic, one clear action.
+- `draft_patient_script(case_summary, language[en|ar-TN|fr|zh], patient_name)` -> script text,
+ 6th-grade reading level, empathetic, one clear action.
 - `request_radiologist_signoff(case_id, radiologist_email)` -> email + signed-JWT link,
   returns immediately, call stays blocked.
 - `place_patient_call(case_id, phone, script, language)` -> re-checks signoff, then
@@ -63,7 +63,9 @@ tunnel for webhook testing.
 - TS: strict mode. shadcn components in `web/components/ui`.
 - Secrets: env vars only (see `.env.example`). Never commit keys.
 - Every state change writes an `audit_log` row (actor, action, details).
-- Languages locked: en, es (es-419), vi (vi-VN).
+- Languages locked: en, ar-TN (Tunisian Arabic / Darija), fr (French), zh (Mandarin Simplified).
+  Note: backend language set changed from en/es/vi → en/ar-TN/fr/zh (new-web language set wins).
+  Voice risk: verify Deepgram TTS/STT support for ar-TN before relying on multilingual calls.
 
 ## Out of scope for v1
 EHR integration, prior-auth letters, real calendar booking, vector search over prior

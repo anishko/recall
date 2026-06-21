@@ -2,25 +2,36 @@
 import { use, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { MOCK_PATIENT_VIEWS, generateSlots } from "@/lib/mockCases";
-import type { Locale } from "@/lib/types";
+import { generateSlots } from "@/lib/mockCases";
+import type { Locale, PatientView } from "@/lib/types";
 import { SchedulingGrid } from "@/components/SchedulingGrid";
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTranslation } from "@/hooks/useTranslation";
 
-export default function SchedulingPage({ params }: { params: Promise<{ token: string }> }) {
+export default function SchedulingPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = use(params);
   const router = useRouter();
-  const view = MOCK_PATIENT_VIEWS[token];
 
+  const [view, setView] = useState<PatientView | null>(null);
   const [locale, setLocale] = useState<Locale>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("recall_locale") as Locale) ?? view?.preferredLanguage ?? "en";
+      return (localStorage.getItem("recall_locale") as Locale) ?? "en";
     }
-    return view?.preferredLanguage ?? "en";
+    return "en";
   });
   const { t } = useTranslation(locale);
+
+  useEffect(() => {
+    fetch(`/api/patient/${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PatientView | null) => { if (data) setView(data); })
+      .catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     document.documentElement.dir = locale === "ar-TN" ? "rtl" : "ltr";
@@ -31,24 +42,12 @@ export default function SchedulingPage({ params }: { params: Promise<{ token: st
   const daysAhead = view?.urgency === "URGENT" ? 14 : 90;
   const slots = generateSlots(daysAhead);
 
-  if (!view) {
-    return (
-      <main
-        className="min-h-dvh flex items-center justify-center"
-        style={{ background: "var(--color-bg)" }}
-      >
-        <p style={{ color: "var(--color-muted)" }}>{t("patient.link_expired")}</p>
-      </main>
-    );
-  }
-
   return (
     <div
       dir={locale === "ar-TN" ? "rtl" : "ltr"}
       lang={locale}
       style={{ background: "var(--color-bg)", minHeight: "100dvh" }}
     >
-      {/* Sticky header */}
       <header
         className="sticky top-0 z-30 flex items-center justify-between px-4 py-3"
         style={{
@@ -72,12 +71,17 @@ export default function SchedulingPage({ params }: { params: Promise<{ token: st
 
       <main id="main-content" className="mx-auto max-w-xl px-4 py-6 space-y-6">
         <div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>
+          <h1
+            className="text-xl font-bold"
+            style={{ color: "var(--color-text)" }}
+          >
             {t("scheduling.title")}
           </h1>
-          <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
-            {view.patientFirstName} · {view.recommendedTimeframe}
-          </p>
+          {view && (
+            <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
+              {view.patientFirstName} · {view.recommendedTimeframe}
+            </p>
+          )}
         </div>
 
         <div className="card-surface p-5 sm:p-6">
@@ -96,7 +100,9 @@ export default function SchedulingPage({ params }: { params: Promise<{ token: st
         </div>
 
         <footer className="text-center pb-8">
-          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>{t("patient.disclaimer")}</p>
+          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>
+            {t("patient.disclaimer")}
+          </p>
         </footer>
       </main>
     </div>

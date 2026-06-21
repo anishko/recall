@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import type { Case } from "@/lib/types";
 import { UrgencyBadge } from "./UrgencyBadge";
 import { ConfidenceBar } from "./ConfidenceBar";
+import { MockBadge } from "./MockBadge";
 
 interface ApprovePanelProps {
   case_: Case;
@@ -74,14 +75,27 @@ export function ApprovePanel({ case_: c, onApprove, onFlag, className }: Approve
       </div>
 
       {/* Patient script preview */}
-      <CollapsibleSection label="Patient script preview" open={scriptOpen} onToggle={() => setScriptOpen((o) => !o)}>
+      <CollapsibleSection
+        label={
+          <span className="flex items-center gap-2">
+            Patient script preview
+            {!c.patientScript[c.patientLanguage] && <MockBadge label="demo script" />}
+          </span>
+        }
+        open={scriptOpen}
+        onToggle={() => setScriptOpen((o) => !o)}
+      >
         <p className="text-sm leading-relaxed italic" style={{ color: "var(--color-muted)" }}>
-          &ldquo;{c.patientScript["en"]}&rdquo;
+          &ldquo;{c.patientScript[c.patientLanguage] || c.patientScript["en"]}&rdquo;
         </p>
       </CollapsibleSection>
 
       {/* Reasoning trace */}
-      <CollapsibleSection label="Reasoning trace" open={reasoningOpen} onToggle={() => setReasoningOpen((o) => !o)}>
+      <CollapsibleSection
+        label={<span className="flex items-center gap-2">Reasoning trace <MockBadge label="demo trace" /></span>}
+        open={reasoningOpen}
+        onToggle={() => setReasoningOpen((o) => !o)}
+      >
         <pre className="font-mono text-[11px] whitespace-pre-wrap leading-relaxed" style={{ color: "var(--color-muted)" }}>
           {c.reasoningTrace}
         </pre>
@@ -226,7 +240,7 @@ function InfoRow({ label, value, href }: { label: string; value: string; href?: 
 function CollapsibleSection({
   label, open, onToggle, children,
 }: {
-  label: string;
+  label: React.ReactNode;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;

@@ -2,25 +2,35 @@
 import { use, useState, useEffect } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { MOCK_PATIENT_VIEWS } from "@/lib/mockCases";
-import type { Locale } from "@/lib/types";
+import type { Locale, PatientView } from "@/lib/types";
 import { SendToFamilyForm } from "@/components/SendToFamilyForm";
 import { LangSwitcher } from "@/components/LangSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { useTranslation } from "@/hooks/useTranslation";
 
-export default function SendToFamilyPage({ params }: { params: Promise<{ token: string }> }) {
+export default function SendToFamilyPage({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
   const { token } = use(params);
   const router = useRouter();
-  const view = MOCK_PATIENT_VIEWS[token];
 
+  const [view, setView] = useState<PatientView | null>(null);
   const [locale, setLocale] = useState<Locale>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("recall_locale") as Locale) ?? view?.preferredLanguage ?? "en";
+      return (localStorage.getItem("recall_locale") as Locale) ?? "en";
     }
-    return view?.preferredLanguage ?? "en";
+    return "en";
   });
   const { t } = useTranslation(locale);
+
+  useEffect(() => {
+    fetch(`/api/patient/${encodeURIComponent(token)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: PatientView | null) => { if (data) setView(data); })
+      .catch(() => {});
+  }, [token]);
 
   useEffect(() => {
     document.documentElement.dir = locale === "ar-TN" ? "rtl" : "ltr";
@@ -30,7 +40,10 @@ export default function SendToFamilyPage({ params }: { params: Promise<{ token: 
 
   if (!view) {
     return (
-      <main className="min-h-dvh flex items-center justify-center" style={{ background: "var(--color-bg)" }}>
+      <main
+        className="min-h-dvh flex items-center justify-center"
+        style={{ background: "var(--color-bg)" }}
+      >
         <p style={{ color: "var(--color-muted)" }}>{t("patient.link_expired")}</p>
       </main>
     );
@@ -42,7 +55,6 @@ export default function SendToFamilyPage({ params }: { params: Promise<{ token: 
       lang={locale}
       style={{ background: "var(--color-bg)", minHeight: "100dvh" }}
     >
-      {/* Header */}
       <header
         className="sticky top-0 z-30 flex items-center justify-between px-4 py-3"
         style={{
@@ -66,7 +78,10 @@ export default function SendToFamilyPage({ params }: { params: Promise<{ token: 
 
       <main id="main-content" className="mx-auto max-w-xl px-4 py-6 space-y-5">
         <div>
-          <h1 className="text-xl font-bold" style={{ color: "var(--color-text)" }}>
+          <h1
+            className="text-xl font-bold"
+            style={{ color: "var(--color-text)" }}
+          >
             {t("sendToFamily.title")}
           </h1>
           <p className="text-sm mt-1" style={{ color: "var(--color-muted)" }}>
@@ -95,7 +110,9 @@ export default function SendToFamilyPage({ params }: { params: Promise<{ token: 
         </div>
 
         <footer className="text-center pb-8">
-          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>{t("patient.disclaimer")}</p>
+          <p className="text-xs" style={{ color: "var(--color-muted-2)" }}>
+            {t("patient.disclaimer")}
+          </p>
         </footer>
       </main>
     </div>

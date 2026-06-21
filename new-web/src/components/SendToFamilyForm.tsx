@@ -56,10 +56,25 @@ export function SendToFamilyForm({ token, labels, className }: SendToFamilyFormP
       return;
     }
     setState("sending");
-    await new Promise((r) => setTimeout(r, 1200));
-    setSendCount((n) => n + 1);
-    setState("sent");
-    setTimeout(() => setState("idle"), 4000);
+    try {
+      const res = await fetch(
+        `/api/patient/${encodeURIComponent(token)}/send-to-family`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone, name, language: lang }),
+        },
+      );
+      if (!res.ok) {
+        setState("idle");
+        return;
+      }
+      setSendCount((n) => n + 1);
+      setState("sent");
+      setTimeout(() => setState("idle"), 4000);
+    } catch {
+      setState("idle");
+    }
   }
 
   if (state === "rate_limit") {
