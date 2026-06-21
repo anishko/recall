@@ -11,6 +11,8 @@ from api.voice.agent_config import CaseContext
 # Ephemeral context registered right before demo dials (any non-UUID id).
 _pending: dict[str, CaseContext] = {}
 
+from api.voice.slots import format_synthetic_slot
+
 # Static fallbacks for local dashboard mock cases.
 _STATIC: dict[str, CaseContext] = {
     "RR-001": CaseContext(
@@ -23,7 +25,7 @@ _STATIC: dict[str, CaseContext] = {
             "appointment within the next 21 days. This is not a confirmed "
             "diagnosis — we are acting quickly because that gives the best outcomes."
         ),
-        offered_slot="Sun Jun 28 at 10:00 AM ET",
+        offered_slot=format_synthetic_slot(21),
     ),
     "RR-002": CaseContext(
         case_id="RR-002",
@@ -33,7 +35,7 @@ _STATIC: dict[str, CaseContext] = {
             "Your mammogram showed an area that needs a closer look with "
             "additional imaging. We have a follow-up appointment available."
         ),
-        offered_slot="Sun Jun 28 at 10:00 AM ET",
+        offered_slot=format_synthetic_slot(14),
     ),
 }
 

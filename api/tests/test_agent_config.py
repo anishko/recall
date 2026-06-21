@@ -48,9 +48,10 @@ def test_prompt_contains_patient_script():
     assert "decision support" in s["agent"]["think"]["prompt"].lower()
 
 
-def test_greeting_uses_patient_name():
-    s = build_settings(_case(patient_name="Anish"))
-    assert "Anish" in s["agent"]["greeting"]
+def test_greeting_always_present():
+    s = build_settings(_case(patient_name="there"))
+    assert "Recall" in s["agent"]["greeting"]
+    assert "minute" in s["agent"]["greeting"].lower()
 
 
 def test_offered_slot_present_in_prompt_for_agent_to_propose():

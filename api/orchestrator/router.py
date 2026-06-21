@@ -175,11 +175,11 @@ def patient_book(token: str = Query(...)) -> dict:
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
 
+    from api.voice.slots import format_synthetic_slot
+
     cls = case.get("guideline_classification") or {}
     days = int(cls.get("timeframe_days") or 90)
-    slot = (datetime.now(timezone.utc) + timedelta(days=days)).replace(
-        hour=15, minute=0, second=0, microsecond=0
-    ).strftime("%a %b %-d at 10:00 AM ET")
+    slot = format_synthetic_slot(days)
 
     case_repo.book_followup_slot(case_id, slot)
     audit_log(case_id, "patient", "booked_via_portal", {"slot": slot})

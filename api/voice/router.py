@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -10,6 +9,7 @@ from api.db.audit import audit_log
 from api.voice.agent_config import CaseContext
 from api.voice.bridge import BridgeState, run_bridge
 from api.voice.call import SignoffNotApprovedError, place_patient_call
+from api.voice.slots import format_synthetic_slot
 
 log = logging.getLogger("radrelay.voice.router")
 
@@ -32,11 +32,7 @@ def outbound_call(req: OutboundCallRequest) -> dict:
 
 
 def _synthetic_slot(timeframe_days: int | None) -> str:
-    days = timeframe_days or 14
-    dt = datetime.now(timezone.utc) + timedelta(days=days)
-    # Round to the next 10am UTC slot, drop seconds.
-    dt = dt.replace(hour=15, minute=0, second=0, microsecond=0)  # 15:00 UTC = 10am ET
-    return dt.strftime("%a %b %-d at 10:00 AM ET")
+    return format_synthetic_slot(timeframe_days)
 
 
 async def _case_loader(case_id: str) -> CaseContext:
