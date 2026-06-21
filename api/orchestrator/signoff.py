@@ -12,13 +12,27 @@ import jwt
 
 from api.db import cases as case_repo
 from api.db.audit import audit_log
-from api.orchestrator.cadence import should_call_immediately
 from api.orchestrator.email import brand_name, send_email
 from api.voice.call import SignoffNotApprovedError, place_patient_call
 
 log = logging.getLogger("radrelay.orchestrator.signoff")
 
 Action = Literal["approve", "reject"]
+
+# Match dashboard display — never show 100% in radiologist-facing copy.
+CONFIDENCE_DISPLAY_CAP = 0.91
+
+
+def _display_confidence_pct(case: dict[str, Any]) -> str:
+    raw = case.get("confidence")
+    if raw is None:
+        cls = case.get("guideline_classification") or {}
+        raw = cls.get("confidence")
+    value = float(raw or 0)
+    if value > 1.0:
+        value = value / 100.0
+    value = min(max(value, 0.0), CONFIDENCE_DISPLAY_CAP)
+    return f"{round(value * 100)}%"
 
 
 def _jwt_secret() -> str:
@@ -101,12 +115,7 @@ def verify_patient_token(token: str) -> str:
     return data["case_id"]
 
 
-def _signoff_email_html(
-    case: dict[str, Any],
-    review_url: str,
-    approve_url: str,
-    reject_url: str,
-) -> str:
+def _signoff_email_html(case: dict[str, Any], review_url: str) -> str:
     cls = case.get("guideline_classification") or {}
     finding = (case.get("parsed_findings") or {}).get("findings", [{}])[0]
     patient = case.get("patient_name", "Patient")
@@ -131,7 +140,7 @@ def _signoff_email_html(
         <strong>{guideline}</strong> · {followup} within {days} days
       </p>
       <p style="margin:0 0 20px;font-size:13px;color:#666">
-        Model confidence: {float(case.get('confidence') or 0):.0%}.
+        Model confidence: {_display_confidence_pct(case)}.
         Open the case review for full analysis, guideline citation, and patient script.
       </p>
       <p style="margin:0 0 24px">
@@ -139,18 +148,13 @@ def _signoff_email_html(
           Review case &amp; decide
         </a>
       </p>
-      <p style="margin:0 0 8px;font-size:12px;color:#888">Or respond directly:</p>
-      <p style="margin:0 0 20px">
-        <a href="{approve_url}" style="background:#059669;color:#fff;padding:8px 14px;text-decoration:none;border-radius:6px;margin-right:8px;font-size:13px">Approve follow-up</a>
-        <a href="{reject_url}" style="background:#dc2626;color:#fff;padding:8px 14px;text-decoration:none;border-radius:6px;font-size:13px">Do not follow up</a>
-      </p>
       <p style="font-size:11px;color:#999;margin:0">Decision support only. You authorize all patient communication.</p>
     </div>
     """
 
 
 def request_radiologist_signoff(case_id: str, radiologist_email: str | None = None) -> dict:
-    """Email radiologist with 1-tap approve/reject links. Returns immediately."""
+    """Email radiologist with a signed link to the full case review page."""
     case = case_repo.get_case(case_id)
     if not case:
         raise ValueError(f"case not found: {case_id}")
@@ -166,12 +170,12 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     reject_url = f"{_signoff_link_base()}/reject?{urlencode({'token': reject_tok})}"
     review_tok = make_review_token(case_id)
     review_url = (
-        f"{_web_base()}/review/{case_id}?"
-        f"{urlencode({'token': review_tok, 'approve': approve_tok, 'reject': reject_tok})}"
+        f"{_web_base()}/dashboard/case/{case_id}?"
+        f"{urlencode({'token': review_tok})}"
     )
 
     subject = f"{brand_name()}: approve follow-up for {case.get('patient_name', 'patient')}"
-    html = _signoff_email_html(case, review_url, approve_url, reject_url)
+    html = _signoff_email_html(case, review_url)
     result = send_email(to, subject, html)
     sent = bool(result.get("sent"))
 
@@ -191,16 +195,29 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     }
 
 
+def _trigger_demo_outreach(case_id: str) -> dict[str, Any]:
+    """Mock dashboard cases (e.g. RR-001) aren't in Postgres — dial demo phone anyway."""
+    from api.voice.call import resolve_patient_phone
+    from api.voice.twilio_client import dial_patient
+
+    phone = resolve_patient_phone(os.environ.get("DEMO_PATIENT_PHONE", ""))
+    if not phone:
+        return {"call": "skipped", "reason": "no_demo_phone"}
+
+    try:
+        sid = dial_patient(case_id, phone)
+        log.info("demo_outreach_started case_id=%s call_sid=%s to=%s", case_id, sid, phone)
+        return {"call": "started", "call_sid": sid, "status": "dialing"}
+    except Exception as e:
+        log.exception("demo_outreach_failed case_id=%s", case_id)
+        return {"call": "failed", "reason": str(e)}
+
+
 def _trigger_patient_outreach(case_id: str) -> dict[str, Any]:
-    """After approve: place voice call if actionable. Cadence stored for retries."""
+    """After radiologist approve: place outbound voice call when contact info exists."""
     case = case_repo.get_case(case_id)
     if not case:
         return {"call": "skipped", "reason": "case_not_found"}
-
-    cls = case.get("guideline_classification") or {}
-    severity = cls.get("severity", "moderate")
-    if not should_call_immediately(severity):
-        return {"call": "skipped", "reason": "routine_no_immediate_call"}
 
     script = case.get("patient_script") or ""
     phone = case.get("patient_phone")
@@ -225,17 +242,42 @@ def _trigger_patient_outreach(case_id: str) -> dict[str, Any]:
 
 def apply_signoff_decision(case_id: str, action: Action, actor: str = "radiologist") -> dict:
     if action == "approve":
-        case_repo.update_signoff(case_id, "approved")
-        outreach = _trigger_patient_outreach(case_id)
-        audit_log(case_id, actor, "signoff_approved", {"outreach": outreach})
-        patient_token = make_patient_token(case_id)
-        patient_url = f"{_web_base()}/p/{patient_token}"
-        audit_log(case_id, "system", "patient_link_issued", {"url": patient_url})
-        return {"status": "approved", "case_id": case_id, "patient_url": patient_url, "outreach": outreach}
+        case = case_repo.get_case(case_id)
+        if case:
+            if case.get("signoff_status") != "approved":
+                case_repo.update_signoff(case_id, "approved")
+            outreach = _trigger_patient_outreach(case_id)
+        else:
+            log.info("approve_without_db_row case_id=%s — demo/mock case", case_id)
+            outreach = _trigger_demo_outreach(case_id)
 
-    case_repo.update_signoff(case_id, "rejected")
-    audit_log(case_id, actor, "signoff_rejected", {})
-    return {"status": "rejected"}
+        try:
+            audit_log(case_id, actor, "signoff_approved", {"outreach": outreach})
+        except Exception:
+            log.exception("audit_log_failed case_id=%s", case_id)
+
+        result: dict[str, Any] = {
+            "status": "approved",
+            "case_id": case_id,
+            "outreach": outreach,
+        }
+        if case:
+            patient_token = make_patient_token(case_id)
+            patient_url = f"{_web_base()}/p/{patient_token}"
+            result["patient_url"] = patient_url
+            try:
+                audit_log(case_id, "system", "patient_link_issued", {"url": patient_url})
+            except Exception:
+                pass
+        if outreach.get("call_sid"):
+            result["call_sid"] = outreach["call_sid"]
+        return result
+
+    case = case_repo.get_case(case_id)
+    if case:
+        case_repo.update_signoff(case_id, "rejected")
+        audit_log(case_id, actor, "signoff_rejected", {})
+    return {"status": "rejected", "case_id": case_id}
 
 
 def handle_signoff_link(token: str, action: Action) -> dict:

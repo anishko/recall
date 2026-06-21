@@ -98,6 +98,20 @@
   border-color: var(--color-primary);
 }
 
+.landing-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.landing-panel-muted {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
 /* ── Tailwind theme bridge ─────────────────────────────────── */
 @theme inline {
   --font-sans: var(--font-geist-sans);

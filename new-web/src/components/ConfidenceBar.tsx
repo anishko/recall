@@ -5,6 +5,8 @@ interface ConfidenceBarProps {
   value: number;
   showLabel?: boolean;
   className?: string;
+  /** Cap displayed value (0–1), e.g. 0.91 → max 91% */
+  max?: number;
 }
 
 function getColorVar(v: number) {
@@ -19,8 +21,9 @@ function getTextVar(v: number) {
   return "var(--color-urgent)";
 }
 
-export function ConfidenceBar({ value, showLabel = true, className }: ConfidenceBarProps) {
-  const pct = Math.round(value * 100);
+export function ConfidenceBar({ value, showLabel = true, className, max }: ConfidenceBarProps) {
+  const capped = max != null ? Math.min(value, max) : value;
+  const pct = Math.round(capped * 100);
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -35,13 +38,13 @@ export function ConfidenceBar({ value, showLabel = true, className }: Confidence
       >
         <div
           className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: getColorVar(value) }}
+          style={{ width: `${pct}%`, background: getColorVar(capped) }}
         />
       </div>
       {showLabel && (
         <span
           className="tabular-nums text-xs font-semibold min-w-[2.5rem]"
-          style={{ color: getTextVar(value) }}
+          style={{ color: getTextVar(capped) }}
         >
           {pct}%
         </span>

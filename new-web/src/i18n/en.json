@@ -94,7 +94,7 @@
     "patient_script": "Patient script preview",
     "confidence": "Confidence score",
     "reasoning": "Reasoning trace",
-    "approve": "Approve & call patient",
+    "approve": "Approve Follow Up",
     "flag": "Flag for review",
     "calling": "Calling",
     "call_state_ringing": "Ringing…",

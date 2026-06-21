@@ -1,9 +1,8 @@
 "use client";
 import { use, useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  ArrowLeft,
   Clock,
   User,
   Globe,
@@ -12,16 +11,16 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Link from "next/link";
+import { Logo } from "@/components/Logo";
+import { cn } from "@/lib/cn";
 import { useDashboard } from "@/store/useDashboard";
 import { SliceCarousel } from "@/components/SliceCarousel";
 import { ReportPanel } from "@/components/ReportPanel";
 import { ApprovePanel } from "@/components/ApprovePanel";
 import { LiveCallStrip } from "@/components/LiveCallStrip";
-import { UrgencyBadge } from "@/components/UrgencyBadge";
 import { ConfidenceBar } from "@/components/ConfidenceBar";
-import { MockBadge } from "@/components/MockBadge";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import type { Case } from "@/lib/types";
+import { mapReviewPayloadToCase } from "@/lib/caseAdapter";
 
 const LANG_LABELS: Record<string, string> = {
   en: "English",
@@ -43,27 +42,47 @@ export default function CaseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const { cases, approveCase, flagCase } = useDashboard();
   const storeCase = cases.find((c) => c.id === id);
+  const reviewToken = searchParams.get("token");
 
-  // If case not in store (direct URL navigation), fetch it individually
+  // If case not in store (direct URL / email link), fetch individually
   const [fetchedCase, setFetchedCase] = useState<Case | null>(null);
   const [fetchLoading, setFetchLoading] = useState(false);
+  const [fetchError, setFetchError] = useState("");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", "dark");
+    localStorage.setItem("recall_theme", "dark");
+  }, []);
 
   useEffect(() => {
     if (storeCase || fetchedCase || fetchLoading) return;
     setFetchLoading(true);
-    fetch(`/api/cases/${id}`)
-      .then((r) => (r.ok ? r.json() : null))
+
+    const load = reviewToken
+      ? fetch(`/api/review/${id}?token=${encodeURIComponent(reviewToken)}`).then(
+          (r) => r.json(),
+        )
+      : fetch(`/api/cases/${id}`).then((r) => (r.ok ? r.json() : null));
+
+    load
       .then((data) => {
-        if (data && !data.error) setFetchedCase(data as Case);
+        if (!data || data.error) {
+          setFetchError(data?.error ?? "Case not found.");
+          return;
+        }
+        setFetchedCase(
+          reviewToken
+            ? mapReviewPayloadToCase(data as Record<string, unknown>)
+            : (data as Case),
+        );
       })
-      .catch(() => {})
+      .catch(() => setFetchError("Could not load case."))
       .finally(() => setFetchLoading(false));
-  }, [id, storeCase, fetchedCase, fetchLoading]);
+  }, [id, storeCase, fetchedCase, fetchLoading, reviewToken]);
 
   const c = storeCase ?? fetchedCase;
 
@@ -76,7 +95,7 @@ export default function CaseDetailPage({
 
   if (fetchLoading && !c) {
     return (
-      <div className="flex items-center justify-center h-full p-12">
+      <div className="min-h-dvh flex items-center justify-center bg-black">
         <div
           className="h-8 w-8 rounded-full border-2 border-t-transparent animate-spin"
           style={{ borderColor: "var(--color-primary)" }}
@@ -87,28 +106,59 @@ export default function CaseDetailPage({
 
   if (!c) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-12">
-        <p style={{ color: "var(--color-muted)" }}>Case not found.</p>
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="mt-4 text-sm hover:underline"
-          style={{ color: "var(--color-primary)" }}
-        >
-          ← Back to queue
-        </button>
+      <div className="min-h-dvh flex flex-col bg-black">
+        <div className="px-6 sm:px-10 py-6">
+          <Logo href="/" size="header" />
+        </div>
+        <div className="flex flex-col items-center justify-center flex-1 text-center p-12">
+          <p className="font-sans" style={{ color: "var(--color-urgent)" }}>
+            {fetchError || "Case not found."}
+          </p>
+          {!reviewToken && (
+            <Link
+              href="/dashboard"
+              className="mt-4 font-sans text-sm hover:underline"
+              style={{ color: "var(--color-primary)" }}
+            >
+              ← Back to queue
+            </Link>
+          )}
+        </div>
       </div>
     );
   }
 
   async function handleApprove() {
-    if (!c) return;
+    if (!c) return { ok: false, error: "Case not loaded" };
     try {
       const res = await fetch(`/api/cases/${c.id}/approve`, { method: "POST" });
-      if (!res.ok) return;
+      const data = (await res.json().catch(() => ({}))) as {
+        detail?: string;
+        error?: string;
+        outreach?: { call?: string; call_sid?: string; reason?: string };
+        call_sid?: string;
+      };
+      if (!res.ok) {
+        return {
+          ok: false,
+          error: data.detail ?? data.error ?? `Approval failed (${res.status})`,
+        };
+      }
       approveCase(c.id);
-      setShowCallStrip(true);
+      const outreach = data.outreach;
+      const callStarted =
+        outreach?.call === "started" || Boolean(data.call_sid ?? outreach?.call_sid);
+      if (callStarted) setShowCallStrip(true);
+      return {
+        ok: true,
+        callStarted,
+        skippedReason:
+          !callStarted && outreach?.reason
+            ? outreach.reason.replace(/_/g, " ")
+            : undefined,
+      };
     } catch {
-      // Backend unreachable — do not update local state (Hard Invariant #1)
+      return { ok: false, error: "Backend unreachable" };
     }
   }
 
@@ -125,57 +175,39 @@ export default function CaseDetailPage({
   const isHighRisk = c.confidence < 0.85 || c.urgency === "URGENT";
 
   return (
-    <div className="relative min-h-full" style={{ background: "var(--color-bg)" }}>
-      {/* Top bar */}
-      <div
-        className="sticky top-0 z-20 flex items-center gap-3 px-6 py-3"
-        style={{
-          background: "color-mix(in oklch, var(--color-surface) 90%, transparent)",
-          backdropFilter: "blur(8px)",
-          borderBottom: "1px solid var(--color-border)",
-        }}
-      >
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="flex items-center gap-1.5 text-sm transition-colors"
-          style={{ color: "var(--color-muted)" }}
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to queue
-        </button>
-        <span style={{ color: "var(--color-border)" }}>/</span>
-        <span
-          className="text-sm font-semibold font-mono"
-          style={{ color: "var(--color-text)" }}
-        >
-          {c.id}
-        </span>
-        <span style={{ color: "var(--color-muted)" }}>·</span>
-        <span className="text-sm" style={{ color: "var(--color-muted)" }}>
-          {c.patientName}
-        </span>
-        <UrgencyBadge tier={c.urgency} size="sm" className="ml-1" />
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs" style={{ color: "var(--color-muted-2)" }}>
-            Arrived {timeAgo(c.arrivedAt)}
-          </span>
-          <ThemeToggle />
+    <div className="min-h-dvh flex flex-col bg-black">
+      <header className="px-6 sm:px-10 py-6 sm:py-8">
+        <Logo href="/" size="header" />
+      </header>
+
+      <div className="px-6 sm:px-10 pb-4 space-y-2">
+        <p className="tag-eyebrow font-sans w-fit">
+          Radiologist review · {c.id}
+        </p>
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <h1
+            className="font-display text-4xl sm:text-5xl leading-tight"
+            style={{ color: "var(--color-text)" }}
+          >
+            Case review
+          </h1>
+          {!reviewToken && (
+            <Link
+              href="/dashboard"
+              className="font-sans text-sm pb-1 hover:underline"
+              style={{ color: "var(--color-muted)" }}
+            >
+              Back to queue
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Risk banner */}
       {isHighRisk && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 px-6 py-2.5 text-xs font-medium"
-          style={{
-            background:
-              c.urgency === "URGENT"
-                ? "var(--color-urgent-bg)"
-                : "var(--color-short-bg)",
-            borderBottom: `1px solid color-mix(in oklch, ${c.urgency === "URGENT" ? "var(--color-urgent)" : "var(--color-short)"} 30%, transparent)`,
-          }}
+          className="mx-6 sm:mx-10 mb-4 landing-panel px-4 py-2.5 flex items-center gap-3 text-xs font-medium font-sans"
         >
           <AlertTriangle
             className="h-3.5 w-3.5 shrink-0"
@@ -196,22 +228,16 @@ export default function CaseDetailPage({
           >
             {c.urgency === "URGENT"
               ? `URGENT — Requires action within ${c.recommendedTimeframe}.`
-              : `Confidence ${Math.round(c.confidence * 100)}% — below threshold. Human review required.`}
+              : `Confidence ${Math.round(Math.min(c.confidence, 0.91) * 100)}% — below threshold. Human review required.`}
           </span>
         </motion.div>
       )}
 
-      {/* Main grid */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-0 min-h-[calc(100vh-120px)]">
-        {/* Left column */}
-        <div className="border-r" style={{ borderColor: "var(--color-border)" }}>
-          {/* Tab bar */}
+      <div className="flex-1 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-3 px-6 sm:px-10 pb-10">
+        <div className="landing-panel overflow-hidden min-h-[480px] min-w-0">
           <div
-            className="flex border-b px-6"
-            style={{
-              borderColor: "var(--color-border)",
-              background: "var(--color-surface)",
-            }}
+            className="flex border-b font-sans"
+            style={{ borderColor: "rgba(255,255,255,0.08)" }}
           >
             {(["imaging", "report", "patient"] as const).map((tab) => (
               <button
@@ -236,21 +262,18 @@ export default function CaseDetailPage({
 
           <div className="p-6">
             {activeTab === "imaging" && (
-              <div className="space-y-4 max-w-xl">
-                <div className="flex items-center justify-between">
+              <div className="space-y-4 w-full">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p
-                        className="text-xs font-semibold uppercase tracking-wide"
-                        style={{ color: "var(--color-muted)" }}
-                      >
-                        CT Chest · Axial lung window
-                      </p>
-                      <MockBadge label="demo imaging" />
-                    </div>
                     <p
-                      className="text-sm font-medium mt-0.5"
-                      style={{ color: "var(--color-text)" }}
+                      className="text-xs font-semibold uppercase tracking-wide font-sans"
+                      style={{ color: "var(--color-muted)" }}
+                    >
+                      CT Chest · Axial lung window
+                    </p>
+                    <p
+                      className="text-sm font-medium mt-0.5 font-sans"
+                      style={{ color: "var(--color-muted-2)" }}
                     >
                       {c.slices.length} slices · Source: Radiopaedia
                     </p>
@@ -259,79 +282,21 @@ export default function CaseDetailPage({
                     href="https://radiopaedia.org/cases/t2a-lung-cancer"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs flex items-center gap-1 hover:underline"
+                    className="text-xs flex items-center gap-1 hover:underline shrink-0 font-sans"
                     style={{ color: "var(--color-primary)" }}
                   >
                     Source <ExternalLink className="h-3 w-3" />
                   </a>
                 </div>
-                <SliceCarousel slices={c.slices} highlight={c.highlight} />
-                <div
-                  className="rounded-xl p-3 space-y-2"
-                  style={{
-                    background: "var(--color-surface-2)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  <p
-                    className="text-xs font-semibold uppercase tracking-wide"
-                    style={{ color: "var(--color-muted)" }}
-                  >
-                    Lung-RADS v2022 classification
-                  </p>
-                  <div className="grid grid-cols-4 gap-1 text-center">
-                    {[
-                      { cat: "1", label: "Negative", color: "var(--color-success)" },
-                      { cat: "2", label: "Benign", color: "var(--color-routine)" },
-                      { cat: "3", label: "Probably benign", color: "var(--color-short)" },
-                      {
-                        cat: "4B",
-                        label: "Suspicious",
-                        color: "var(--color-urgent)",
-                        active: true,
-                      },
-                    ].map(({ cat, label, color, active }) => (
-                      <div
-                        key={cat}
-                        className="rounded-lg p-1.5 space-y-0.5"
-                        style={{
-                          background: active
-                            ? `color-mix(in oklch, ${color} 12%, transparent)`
-                            : "transparent",
-                          border: active
-                            ? `1px solid color-mix(in oklch, ${color} 30%, transparent)`
-                            : "1px solid var(--color-border)",
-                        }}
-                      >
-                        <p className="text-xs font-bold" style={{ color }}>
-                          {cat}
-                        </p>
-                        <p
-                          className="text-[9px] leading-tight"
-                          style={{
-                            color: active ? color : "var(--color-muted-2)",
-                          }}
-                        >
-                          {label}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <SliceCarousel slices={c.slices} className="w-full" />
               </div>
             )}
 
             {activeTab === "report" && (
               <div className="max-w-2xl space-y-4">
-                <div
-                  className="rounded-xl p-4 space-y-3"
-                  style={{
-                    background: "var(--color-surface)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
+                <div className="landing-panel-muted p-4 space-y-3">
                   <p
-                    className="text-xs font-semibold uppercase tracking-wide"
+                    className="text-xs font-semibold uppercase tracking-wide font-sans"
                     style={{ color: "var(--color-muted)" }}
                   >
                     AI Findings Summary
@@ -395,34 +360,11 @@ export default function CaseDetailPage({
                   }}
                 >
                   <p
-                    className="text-xs font-semibold uppercase tracking-wide"
+                    className="text-xs font-semibold uppercase tracking-wide font-sans"
                     style={{ color: "var(--color-muted)" }}
                   >
                     Patient profile
                   </p>
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
-                      style={{
-                        background: "var(--color-routine-bg)",
-                        color: "var(--color-routine)",
-                      }}
-                    >
-                      {c.patientInitials}
-                    </div>
-                    <div>
-                      <p
-                        className="font-semibold"
-                        style={{ color: "var(--color-text)" }}
-                      >
-                        {c.patientName}
-                      </p>
-                      <p className="text-xs" style={{ color: "var(--color-muted)" }}>
-                        {c.patientAge > 0 ? `${c.patientAge} years old · ` : ""}
-                        {LANG_LABELS[c.patientLanguage] ?? "English"}
-                      </p>
-                    </div>
-                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       {
@@ -515,16 +457,13 @@ export default function CaseDetailPage({
                     border: "1px solid var(--color-border)",
                   }}
                 >
-                  <div className="flex items-center gap-2">
-                    <p
-                      className="text-xs font-semibold uppercase tracking-wide"
-                      style={{ color: "var(--color-muted)" }}
-                    >
-                      AI confidence breakdown
-                    </p>
-                    <MockBadge label="sub-scores demo" />
-                  </div>
-                  <ConfidenceBar value={c.confidence} />
+                  <p
+                    className="text-xs font-semibold uppercase tracking-wide font-sans"
+                    style={{ color: "var(--color-muted)" }}
+                  >
+                    AI confidence breakdown
+                  </p>
+                  <ConfidenceBar value={c.confidence} max={0.91} />
                   <div className="space-y-2">
                     {Object.entries(c.subScores).map(([k, v]) => (
                       <div key={k} className="flex items-center gap-3">
@@ -535,7 +474,7 @@ export default function CaseDetailPage({
                           {k.replace(/([A-Z])/g, " $1")}
                         </span>
                         <div className="flex-1">
-                          <ConfidenceBar value={v} showLabel />
+                          <ConfidenceBar value={v} showLabel max={0.91} />
                         </div>
                       </div>
                     ))}
@@ -547,9 +486,14 @@ export default function CaseDetailPage({
         </div>
 
         {/* Right column — sticky actions */}
-        <div className="p-6" style={{ background: "var(--color-surface)" }}>
-          <div className="sticky top-20">
-            <ApprovePanel case_={c} onApprove={handleApprove} onFlag={handleFlag} />
+        <div className="landing-panel p-6 min-w-0 xl:max-w-[360px]">
+          <div className="sticky top-6">
+            <ApprovePanel
+              case_={c}
+              onApprove={handleApprove}
+              onFlag={handleFlag}
+              variant="landing"
+            />
           </div>
         </div>
       </div>

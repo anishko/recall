@@ -1,30 +1,20 @@
 "use client";
 import { useState, useCallback, useRef } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/cn";
-
-interface Highlight {
-  x: number;
-  y: number;
-  r: number;
-  sliceIndex?: number;
-}
 
 interface SliceCarouselProps {
   slices: string[];
-  highlight?: Highlight;
   className?: string;
   showControls?: boolean;
 }
 
-export function SliceCarousel({ slices, highlight, className, showControls = true }: SliceCarouselProps) {
+export function SliceCarousel({ slices, className, showControls = true }: SliceCarouselProps) {
   const [index, setIndex] = useState(0);
   const [zoom, setZoom] = useState(1);
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
-  const [showHighlight, setShowHighlight] = useState(true);
   const [fullscreen, setFullscreen] = useState(false);
   const panStart = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,9 +59,6 @@ export function SliceCarousel({ slices, highlight, className, showControls = tru
     setZoom((z) => Math.max(1, Math.min(z + delta, 4)));
     if (e.deltaY > 0) { setPanX(0); setPanY(0); }
   };
-
-  const hasHighlight = showHighlight && highlight &&
-    (highlight.sliceIndex == null || highlight.sliceIndex === index);
 
   const imageStyle = {
     transform: `scale(${zoom}) translate(${panX / zoom}px, ${panY / zoom}px)`,
@@ -119,66 +106,11 @@ export function SliceCarousel({ slices, highlight, className, showControls = tru
             }}
           />
 
-          {/* SVG highlight */}
-          {hasHighlight && (
-            <svg
-              className="absolute inset-0 w-full h-full pointer-events-none"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-            >
-              <defs>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="0.8" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-              </defs>
-              {/* Outer pulse ring */}
-              <circle
-                cx={highlight.x} cy={highlight.y} r={highlight.r + 3}
-                fill="none" stroke="var(--color-annotation)" strokeWidth="0.3" opacity="0.4"
-              >
-                <animate attributeName="r" values={`${highlight.r + 2};${highlight.r + 5};${highlight.r + 2}`} dur="2.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.4;0;0.4" dur="2.5s" repeatCount="indefinite" />
-              </circle>
-              {/* Main circle */}
-              <circle
-                cx={highlight.x} cy={highlight.y} r={highlight.r}
-                fill="var(--color-annotation-bg)"
-                stroke="var(--color-annotation)" strokeWidth="0.7"
-                filter="url(#glow)"
-              >
-                <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite" />
-              </circle>
-              {/* Label */}
-              <text
-                x={highlight.x + highlight.r + 1.5}
-                y={highlight.y - 1}
-                fontSize="3.5"
-                fill="var(--color-annotation)"
-                fontFamily="system-ui, sans-serif"
-                fontWeight="600"
-              >
-                Finding
-              </text>
-              <line
-                x1={highlight.x + highlight.r} y1={highlight.y}
-                x2={highlight.x + highlight.r + 1.5} y2={highlight.y}
-                stroke="var(--color-annotation)" strokeWidth="0.4" opacity="0.7"
-              />
-            </svg>
-          )}
         </div>
 
         {/* Top-right controls */}
         {showControls && (
-          <div className="absolute top-2 right-2 flex gap-1">
-            <ControlButton
-              onClick={() => setShowHighlight((v) => !v)}
-              title={showHighlight ? "Hide finding" : "Show finding"}
-              active={showHighlight}
-            >
-              <div className="h-3 w-3 rounded-full border-2 border-current" />
-            </ControlButton>
+          <div className="absolute top-2 right-2 flex gap-1.5">
             <ControlButton onClick={() => setZoom((z) => Math.min(z + 0.5, 4))} title="Zoom in">
               <ZoomIn className="h-3.5 w-3.5" />
             </ControlButton>
@@ -263,12 +195,11 @@ export function SliceCarousel({ slices, highlight, className, showControls = tru
 }
 
 function ControlButton({
-  onClick, title, children, active,
+  onClick, title, children,
 }: {
   onClick: () => void;
   title: string;
   children: React.ReactNode;
-  active?: boolean;
 }) {
   return (
     <button
@@ -276,11 +207,7 @@ function ControlButton({
       title={title}
       aria-label={title}
       className="flex h-7 w-7 items-center justify-center rounded-md transition-colors"
-      style={
-        active
-          ? { background: "var(--color-annotation)", color: "#000" }
-          : { background: "rgba(0,0,0,0.5)", color: "rgba(255,255,255,0.8)" }
-      }
+      style={{ background: "rgba(0,0,0,0.5)", color: "rgba(255,255,255,0.8)" }}
     >
       {children}
     </button>

@@ -1,12 +1,23 @@
 import json
+import uuid
 from datetime import datetime, timezone
 
 from api.db.client import get_supabase
 
 
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except ValueError:
+        return False
+
+
 def get_case_signoff_status(case_id: str) -> str | None:
     """Re-read signoff_status straight from Postgres. The call gate depends on
     this being authoritative — never cache, never trust caller-supplied state."""
+    if not _is_uuid(case_id):
+        return None
     res = (
         get_supabase()
         .table("cases")
@@ -22,6 +33,8 @@ def get_case_signoff_status(case_id: str) -> str | None:
 
 
 def get_case(case_id: str) -> dict | None:
+    if not _is_uuid(case_id):
+        return None
     res = (
         get_supabase()
         .table("cases")
@@ -77,12 +90,23 @@ def update_call_attempt(
     call_sid: str | None = None,
     next_contact_at: str | None = None,
 ) -> None:
-    payload: dict = {"call_attempts": attempt}
+    payload: dict = {}
     if call_sid:
         payload["call_sid"] = call_sid
     if next_contact_at:
         payload["next_contact_at"] = next_contact_at
-    get_supabase().table("cases").update(payload).eq("id", case_id).execute()
+    if attempt:
+        payload["call_attempts"] = attempt
+    if not payload:
+        return
+    try:
+        get_supabase().table("cases").update(payload).eq("id", case_id).execute()
+    except Exception:
+        # Schema may lack call_attempts / next_contact_at — persist call_sid only.
+        if call_sid:
+            get_supabase().table("cases").update({"call_sid": call_sid}).eq(
+                "id", case_id
+            ).execute()
 
 
 def record_family_contact(case_id: str, family_phone: str) -> None:

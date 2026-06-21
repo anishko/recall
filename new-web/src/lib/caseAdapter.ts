@@ -88,12 +88,14 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-/** MOCK: derive sub-scores from overall confidence with slight variance. */
+/** MOCK: derive sub-scores from overall confidence; capped at 91%. */
 function mockSubScores(confidence: number): SubScores {
+  const cap = (v: number) => Math.min(v, 0.91);
+  const base = Math.min(confidence, 0.91);
   return {
-    extraction: Math.min(1, +(confidence + 0.04).toFixed(2)),
-    classification: +Math.max(0, confidence - 0.01).toFixed(2),
-    scriptQuality: Math.min(1, +(confidence + 0.02).toFixed(2)),
+    extraction: cap(+(base + 0.04).toFixed(2)),
+    classification: cap(+Math.max(0, base - 0.03).toFixed(2)),
+    scriptQuality: cap(+(base + 0.01).toFixed(2)),
   };
 }
 
@@ -176,6 +178,34 @@ function mapCallOutcome(outcome: string | null): Case["callOutcome"] {
     failed: "escalated",
   };
   return m[outcome];
+}
+
+/** Review API payload (GET /orchestrator/signoff/review) → Case view-model. */
+export function mapReviewPayloadToCase(payload: Record<string, unknown>): Case {
+  const row: DbCase = {
+    id: payload.case_id as string,
+    created_at: new Date().toISOString(),
+    patient_name: (payload.patient_name as string) ?? "Unknown",
+    patient_phone: "",
+    patient_language: (payload.patient_language as DbCase["patient_language"]) ?? "en",
+    report_pdf_url: null,
+    parsed_findings: (payload.parsed_findings as DbCase["parsed_findings"]) ?? null,
+    guideline_classification:
+      (payload.guideline_classification as DbCase["guideline_classification"]) ?? null,
+    confidence: (payload.confidence as number) ?? null,
+    patient_script: (payload.patient_script as string) ?? null,
+    signoff_status: (payload.signoff_status as DbCase["signoff_status"]) ?? "pending",
+    signoff_at: null,
+    call_sid: null,
+    call_outcome: null,
+    call_transcript: null,
+    followup_booked_slot: null,
+    cost_usd: null,
+    patient_summary: (payload.patient_summary as string) ?? null,
+    risk_tier: (payload.risk_tier as string) ?? null,
+    contact_cadence_hours: (payload.contact_cadence_hours as number) ?? null,
+  };
+  return mapRowToCase(row);
 }
 
 /** Convert a Supabase DB row into the new-web view-model Case. */

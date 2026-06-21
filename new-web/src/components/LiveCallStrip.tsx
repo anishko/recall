@@ -7,20 +7,12 @@ import type { Case } from "@/lib/types";
 type CallState = "ringing" | "connected" | "talking" | "scheduled" | "ended";
 
 const STATE_LABELS: Record<CallState, string> = {
-  ringing:   "Ringing…",
+  ringing: "Ringing…",
   connected: "Connected",
-  talking:   "Talking",
+  talking: "Talking",
   scheduled: "Appointment scheduled",
-  ended:     "Call ended",
+  ended: "Call ended",
 };
-
-const TRANSCRIPT_LINES = [
-  "[Recall Agent]: Hello, this is Recall calling on behalf of Dr. Chen…",
-  "[Patient]: Yes, hello?",
-  "[Recall Agent]: I'm calling about your recent imaging results. I'd like to walk you through what we found…",
-  "[Patient]: Oh, okay. Is it serious?",
-  "[Recall Agent]: We found a small spot that we want to follow up on. I'll explain everything in simple terms…",
-];
 
 interface LiveCallStripProps {
   case_: Case;
@@ -36,23 +28,13 @@ const LANG_LABELS: Record<string, string> = {
 
 export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
   const [callState, setCallState] = useState<CallState>("ringing");
-  const [transcriptLines, setTranscriptLines] = useState<string[]>([]);
 
   useEffect(() => {
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    timers.push(setTimeout(() => setCallState("connected"), 2500));
-    timers.push(setTimeout(() => setCallState("talking"), 4000));
-    TRANSCRIPT_LINES.forEach((line, i) => {
-      timers.push(
-        setTimeout(
-          () => setTranscriptLines((prev) => [...prev, line]),
-          4500 + i * 2200
-        )
-      );
-    });
-    timers.push(
-      setTimeout(() => setCallState("scheduled"), 4500 + TRANSCRIPT_LINES.length * 2200 + 1000)
-    );
+    const timers = [
+      setTimeout(() => setCallState("connected"), 2500),
+      setTimeout(() => setCallState("talking"), 4000),
+      setTimeout(() => setCallState("scheduled"), 12000),
+    ];
     return () => timers.forEach(clearTimeout);
   }, []);
 
@@ -70,9 +52,8 @@ export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
         borderTop: "1px solid var(--color-border)",
       }}
     >
-      <div className="max-w-4xl mx-auto p-4">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-3">
+      <div className="max-w-4xl mx-auto px-4 py-3">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
               className="flex h-9 w-9 items-center justify-center rounded-full"
@@ -115,29 +96,6 @@ export function LiveCallStrip({ case_: c, onClose }: LiveCallStripProps) {
             </button>
           )}
         </div>
-
-        {/* Transcript */}
-        {transcriptLines.length > 0 && (
-          <div
-            className="rounded-xl p-3 max-h-28 overflow-y-auto space-y-1"
-            style={{
-              background: "var(--color-surface-2)",
-              border: "1px solid var(--color-border)",
-            }}
-          >
-            {transcriptLines.map((line, i) => (
-              <motion.p
-                key={i}
-                initial={{ opacity: 0, y: 4 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-xs font-mono leading-relaxed"
-                style={{ color: "var(--color-muted)" }}
-              >
-                {line}
-              </motion.p>
-            ))}
-          </div>
-        )}
       </div>
     </motion.div>
   );

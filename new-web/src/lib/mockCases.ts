@@ -15,7 +15,7 @@ export const MOCK_CASES: Case[] = [
     recommendedTimeframe: "21 days",
     urgency: "URGENT",
     confidence: 0.91,
-    subScores: { extraction: 0.96, classification: 0.88, scriptQuality: 0.90 },
+    subScores: { extraction: 0.91, classification: 0.88, scriptQuality: 0.90 },
     status: "pending",
     reportRaw: `CLINICAL INDICATION: Persistent cough, mild shortness of breath.
 
