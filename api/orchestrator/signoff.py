@@ -34,15 +34,11 @@ def _api_base() -> str:
 
 
 def _signoff_link_base() -> str:
-    """Base URL for email approve/reject links.
-
-    Routes through the deployed web app (/backend proxy) so doctors land on
-    Vercel, not ngrok. PUBLIC_API_BASE_URL stays for Twilio voice webhooks.
-    """
+    """Email approve/reject links → Next.js /api/signoff (not /backend — 404 on Vercel)."""
     web = os.environ.get("WEB_PUBLIC_URL", "").strip().rstrip("/")
     if web:
-        return f"{web}/backend"
-    return _api_base()
+        return f"{web}/api/signoff"
+    return f"{_web_base()}/api/signoff"
 
 
 def _web_base() -> str:
@@ -126,8 +122,8 @@ def request_radiologist_signoff(case_id: str, radiologist_email: str | None = No
     to = radiologist_email or _radiologist_email()
     approve_tok = make_signoff_token(case_id, "approve")
     reject_tok = make_signoff_token(case_id, "reject")
-    approve_url = f"{_signoff_link_base()}/orchestrator/signoff/approve?{urlencode({'token': approve_tok})}"
-    reject_url = f"{_signoff_link_base()}/orchestrator/signoff/reject?{urlencode({'token': reject_tok})}"
+    approve_url = f"{_signoff_link_base()}/approve?{urlencode({'token': approve_tok})}"
+    reject_url = f"{_signoff_link_base()}/reject?{urlencode({'token': reject_tok})}"
     case_url = f"{_web_base()}/cases/{case_id}"
 
     subject = f"{brand_name()}: approve follow-up for {case.get('patient_name', 'patient')}"
@@ -173,16 +169,20 @@ def _trigger_patient_outreach(case_id: str) -> dict[str, Any]:
             case_repo.update_call_attempt(case_id, attempt=1, call_sid=result["call_sid"])
         except Exception:
             log.exception("update_call_attempt_failed case_id=%s", case_id)
+        log.info("outreach_started case_id=%s call_sid=%s", case_id, result["call_sid"])
         return {"call": "started", **result}
     except SignoffNotApprovedError as e:
         return {"call": "blocked", "reason": str(e)}
+    except Exception as e:
+        log.exception("outreach_failed case_id=%s", case_id)
+        return {"call": "failed", "reason": str(e)}
 
 
 def apply_signoff_decision(case_id: str, action: Action, actor: str = "radiologist") -> dict:
     if action == "approve":
         case_repo.update_signoff(case_id, "approved")
-        audit_log(case_id, actor, "signoff_approved", {})
         outreach = _trigger_patient_outreach(case_id)
+        audit_log(case_id, actor, "signoff_approved", {"outreach": outreach})
         patient_token = make_patient_token(case_id)
         patient_url = f"{_web_base()}/p/{patient_token}"
         audit_log(case_id, "system", "patient_link_issued", {"url": patient_url})

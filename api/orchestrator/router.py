@@ -57,6 +57,18 @@ async def analyze_report(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=502, detail=f"Analysis failed: {e}") from e
 
 
+@router.post("/signoff/apply")
+def signoff_apply(token: str = Query(...), action: str = Query(...)) -> dict:
+    """JSON sign-off for Next.js /api/signoff proxy (email Yes/No buttons)."""
+    if action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="action must be approve or reject")
+    try:
+        return handle_signoff_link(token, action)  # type: ignore[arg-type]
+    except Exception as e:
+        log.exception("signoff_apply_failed action=%s", action)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
 @router.get("/signoff/approve", response_class=HTMLResponse)
 def signoff_approve(token: str = Query(...)) -> HTMLResponse:
     try:
