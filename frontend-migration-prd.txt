@@ -1,0 +1,91 @@
+Confirmed the exact contract. The backend bakes these absolute URLs into the Resend email (via WEB_PUBLIC_URL=https://recall.pics):
+
+…/api/signoff/approve?token=<JWT> and …/api/signoff/reject?token=<JWT>
+"Open full case" → …/cases/{case_id}
+Patient portal → …/p/{JWT}
+So the routing solution is fully determined by what already exists in production: new-web must serve those exact paths, and I can keep every Vercel env var name identical. Here is the migration plan.
+
+Migration Plan — port the backend + functionality into new-web/
+Decisions locked
+Languages: en / ar-TN / fr / zh (new-web set wins). Backend prompts, schema, CLAUDE.md, and voice config get retuned.
+Demo-only fields: keep them populated from static/demo values, and tag each as mock (temporary, removable later).
+Routing: reuse the exact live URLs and the exact Vercel env var names. No env changes; the only Vercel change is pointing the project's build at new-web/ instead of web/.
+Approach: adapter layer — keep 100% of new-web's views, swap mock data sources for real ones behind identical response shapes.
+Phase 0 — Deployment & env parity (no behavior change)
+new-web reads the same env var names web uses: API_PROXY_TARGET, SUPABASE_SERVICE_ROLE_KEY, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY. (Confirmed these are the only ones the web layer consumes.)
+Add to new-web/next.config.ts the /backend/:path* → API_PROXY_TARGET rewrite (parity with web, used by the dashboard SignoffPanel-style call).
+Add deps to new-web: @supabase/supabase-js. (It already has framer-motion, lucide, zustand, next 15.)
+Vercel: switch the recall.pics project root/build to new-web/. Env vars unchanged.
+Phase 1 — Port the data/proxy plumbing
+Create in new-web/src/lib/:
+
+api-proxy.ts — copy of web's (apiBase(), apiProxyHeaders()).
+cases.ts — Supabase service-role reader (listCases, getCase, getCaseAudit) with mock fallback, copied from web.
+supabaseTypes.ts — the snake_case DB Case/ParsedFindings/GuidelineClassification/AuditLogEntry types (from web's types.ts), kept separate from new-web's view-model types.ts.
+caseAdapter.ts — the heart of the merge (spec below).
+Phase 2 — The adapter (DB row → new-web view models)
+mapRowToCase(row): Case and mapToPatientView(apiResp): PatientView. Field plan:
+
+Real (from backend):
+
+id←id, patientName←patient_name, arrivedAt←created_at
+patientAge←parsed_findings.demographics.age, patientLanguage←patient_language
+finding/findingDetail←parsed_findings.findings[0] (+ guideline), guideline←guideline_classification.guideline_used, recommendedTimeframe←"${timeframe_days} days"
+confidence←confidence
+urgency← map severity → tier: critical|high→URGENT, moderate→SHORT, low|routine→ROUTINE, and a no-followup heuristic → NO_FU (small mapping fn)
+status← reuse web's pipelineStage() logic mapped to new-web's CaseStatus
+patientInitials← derived from name
+callOutcome/callTranscript/scheduledAt← call_outcome/call_transcript/followup_booked_slot
+Mock-tagged (no backend source — keep static, flag):
+
+slices + highlight → keep the static radrelay_images set
+entities (report NER highlight) → keep demo spans or empty
+subScores → derived placeholder from confidence
+reasoningTrace → use understandable_diagnosis when present (from analyze response), else demo text
+reportRaw → not stored; show parsed-findings-derived text or demo
+patientScript: Record<Locale,string> → put real patient_script under the case's own language key; other 3 = demo strings
+callDuration → demo
+Each mock field is registered in a MOCK_FIELDS set and rendered with a small <MockBadge/> (e.g. a subtle "demo data" pill) so we can see at a glance what still needs real wiring. A dev-only banner can list active mock fields per case.
+
+Phase 3 — Replace new-web's mock API routes with real ones (same response shapes)
+GET /api/cases → listCases() mapped via adapter (replaces MOCK_CASES).
+GET /api/cases/[id] → getCase(id) mapped.
+POST /api/cases/[id]/approve → proxy to /backend/orchestrator/signoff/decide (real DB write + the server-side call gate). This closes Hard-Invariant #1, which is currently unenforced in new-web.
+POST /api/cases/[id]/flag → reject/flag via /signoff/decide (action reject) or an audit write.
+GET /api/patient/[token] → proxy /orchestrator/patient/view?token=, map to PatientView (real summary + mock structured explanation/slices, tagged).
+POST /api/patient/[token]/schedule → proxy /orchestrator/patient/book?token=.
+POST /api/patient/[token]/send-to-family → proxy /orchestrator/patient/family?token=.
+GET /api/audit → read audit_log (real) instead of MOCK_AUDIT_CALLS.
+GET /api/eval → stays mock (no backend endpoint exists), clearly tagged.
+The dashboard/case-detail pages currently hydrate from the Zustand store seeded by MOCK_CASES. Change the store/pages to hydrate from GET /api/cases (keep the store for client interactivity, just seed it from real data). Realtime "new case" injector becomes optional/demo.
+
+Phase 4 — Sign-off + email landing routes (the delegated routing problem)
+Create these exact paths in new-web so live email links never 404 and no backend/env change is needed:
+
+src/app/api/signoff/approve/route.ts — port web's handler verbatim: proxy POST {API_PROXY_TARGET}/orchestrator/signoff/apply?token=&action=approve, then redirect to the case landing with ?approved=1&call_sid=….
+src/app/api/signoff/reject/route.ts — same → redirect to rejected page.
+src/app/cases/[id]/page.tsx — the email "Open full case" target and the post-approve landing. Simplest: a server route that fetches the real case and redirects to /dashboard/case/[id] (preserving ?approved=1), so there's one detail implementation. (Design choice to confirm at build time: redirect vs. render a standalone no-sidebar detail.)
+src/app/signoff/rejected/page.tsx — port web's rejected page (restyled).
+/dashboard/case/[id] reads ?approved=1/?call_sid to trigger the existing LiveCallStrip for the "just approved → calling" moment.
+This keeps https://recall.pics/api/signoff/*, /cases/{id}, and /p/{token} all valid with the JWTs the backend already issues.
+
+Phase 5 — Upload screen (missing entirely in new-web)
+src/app/upload/page.tsx + an upload component (port report-upload.tsx + analyze-results.tsx, restyled to new-web's design system).
+src/app/api/analyze/route.ts — port web's raw-multipart-streaming 120s proxy verbatim (the handoff doc flags this as a hard-won fix; re-parsing FormData breaks Vercel→ngrok).
+Link it from the dashboard sidebar.
+Phase 6 — Language switch to en/ar-TN/fr/zh (cross-lane)
+api/orchestrator/guidelines.py: change en|es|vi → en|ar-TN|fr|zh in PARSE_SYSTEM, DRAFT_SCRIPT_SYSTEM, UD_SYSTEM (and note ar-TN = Tunisian Arabic).
+api/orchestrator/analyze.py: PARSE_SCHEMA.language_preference enum.
+CLAUDE.md (the "languages locked" line + §) and TEAM_HANDOFF.md §16.
+Voice risk (flag for Anish): Deepgram TTS/STT may not support ar-TN (Tunisian Arabic) or all four as voice locales. This needs verification before relying on multilingual calls; the dashboard/portal i18n is unaffected. I'll surface this as an explicit risk, not silently assume it works.
+Phase 7 — Cleanup / retire web/
+Once new-web reaches parity, web/ is retired (kept in git history). Don't delete until the new flow is verified end-to-end.
+Open design choices I'll make sensibly unless you object
+/cases/[id] → redirect to /dashboard/case/[id] (single detail impl) vs. standalone no-sidebar page. Leaning redirect.
+"Mock" tagging UI: a small subtle pill + a dev-only summary banner. Leaning subtle pill so demo screenshots stay clean.
+Patient-portal route shape: keep new-web's nicer /api/patient/[token]/* and proxy underneath (rather than adopting web's /api/patient/view).
+Biggest risks (called out honestly)
+Voice locales for ar-TN/fr/zh (Phase 6) — may not all be Deepgram-supported; affects calls, not UI.
+reportRaw + entities drive new-web's nicest doctor feature (highlighted report) but have zero backend source → these stay mock-tagged until/unless we store report text + run NER.
+Single→multi script: real script exists in one language only; the other 3 portal/script languages are demo until the pipeline emits all four.
+This plan retains every new-web view, wires real data + the safety-critical sign-off gate behind them, keeps all live URLs/env vars stable, and clearly flags what's still mock. Want me to proceed with implementation starting at Phase 0–1 (plumbing + adapter), or adjust any of the three open design choices first?
