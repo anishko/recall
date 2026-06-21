@@ -61,6 +61,12 @@ export interface Case {
   call_transcript: string | null;
   followup_booked_slot: string | null; // mocked synthetic slot in v1
   cost_usd: number | null;
+  patient_summary?: string | null;
+  risk_tier?: string | null;
+  contact_cadence_hours?: number | null;
+  next_contact_at?: string | null;
+  call_attempts?: number | null;
+  family_contact_phone?: string | null;
 }
 
 /** A row of the `audit_log` table. */

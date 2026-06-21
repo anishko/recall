@@ -6,7 +6,7 @@ import type {
   SignoffStatus,
 } from "@/lib/types";
 
-export const CONFIDENCE_THRESHOLD = 0.75;
+export const CONFIDENCE_THRESHOLD = 0.85;
 
 export const LANGUAGE_LABELS: Record<Language, string> = {
   en: "English",

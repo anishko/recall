@@ -20,7 +20,7 @@ import { ConfidenceMeter } from "@/components/confidence-meter";
 import { PipelineProgress } from "@/components/pipeline-progress";
 import { AuditTimeline } from "@/components/audit-timeline";
 import { SignoffPanel } from "@/components/signoff-panel";
-import { allCaseIds, getCase, getCaseAudit } from "@/lib/cases";
+import { getCase, getCaseAudit } from "@/lib/cases";
 import {
   CONFIDENCE_THRESHOLD,
   LANGUAGE_FLAGS,
@@ -34,8 +34,10 @@ import {
 } from "@/lib/case-utils";
 
 export function generateStaticParams() {
-  return allCaseIds().map((id) => ({ id }));
+  return [];
 }
+
+export const dynamic = "force-dynamic";
 
 export default async function CaseDetailPage({
   params,
@@ -106,7 +108,7 @@ export default async function CaseDetailPage({
 
         {/* Sign-off gate — only when a human is needed */}
         {needsAttention(c) && (
-          <SignoffPanel patientName={c.patient_name} />
+          <SignoffPanel patientName={c.patient_name} caseId={c.id} />
         )}
 
         <div className="grid gap-6 lg:grid-cols-3">

@@ -6,7 +6,7 @@ const ACTION_LABELS: Record<string, string> = {
   parse_report: "Findings parsed",
   classify_actionability: "Guideline applied",
   draft_patient_script: "Patient script drafted",
-  request_radiologist_signoff: "Sign-off requested (SMS)",
+  request_radiologist_signoff: "Sign-off requested (email)",
   signoff_approved: "Approved by radiologist",
   signoff_rejected: "Rejected by radiologist",
   flagged_low_confidence: "Flagged — low confidence",
