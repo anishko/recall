@@ -11,7 +11,9 @@ Prereqs:
 - .env loaded with TWILIO_*, DEEPGRAM_API_KEY, SUPABASE_*, PUBLIC_API_BASE_URL.
 
 Run:
-    python -m scripts.hello_world_call +1XXXXXXXXXX [name]
+    python -m scripts.hello_world_call +1XXXXXXXXXX [name] [language]
+
+Language defaults to 'en'. Supported codes: en, es, fr, vi.
 """
 
 import sys
@@ -24,11 +26,11 @@ from api.db.client import get_supabase  # noqa: E402  (after load_dotenv)
 from api.voice.call import place_patient_call  # noqa: E402
 
 
-def insert_approved_case(phone: str, name: str) -> str:
+def insert_approved_case(phone: str, name: str, language: str) -> str:
     row = {
         "patient_name": name,
         "patient_phone": phone,
-        "patient_language": "en",
+        "patient_language": language,
         "patient_script": (
             "This is a synthetic hello-world test. Greet the patient warmly, "
             "tell them we are calling to confirm a follow-up imaging slot, "
@@ -44,19 +46,23 @@ def insert_approved_case(phone: str, name: str) -> str:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("usage: python -m scripts.hello_world_call <e164-phone> [name]")
+        print(
+            "usage: python -m scripts.hello_world_call "
+            "<e164-phone> [name] [language=en|es|fr|vi]"
+        )
         sys.exit(2)
     phone = sys.argv[1]
     name = sys.argv[2] if len(sys.argv) > 2 else "Friend"
+    language = sys.argv[3] if len(sys.argv) > 3 else "en"
 
-    case_id = insert_approved_case(phone, name)
-    print(f"inserted case {case_id} (approved)")
+    case_id = insert_approved_case(phone, name, language)
+    print(f"inserted case {case_id} (approved, lang={language})")
 
     result = place_patient_call(
         case_id=case_id,
         phone=phone,
         script="(loaded from cases.patient_script)",
-        language="en",
+        language=language,
     )
     print(f"dialing — call_sid={result['call_sid']}")
 
