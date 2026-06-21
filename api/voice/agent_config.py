@@ -40,7 +40,7 @@ _SPEAK_MODEL_BY_LANG = {
 
 def _system_prompt(case: CaseContext) -> str:
     return (
-        "You are RadRelay, a friendly assistant calling a patient on behalf of "
+        "You are Recall, a friendly assistant calling a patient on behalf of "
         f"their radiologist. This is decision support only — never give a "
         "diagnosis, never speculate beyond the script, never discuss treatment. "
         "If the patient asks medical questions you cannot answer from the "
@@ -58,7 +58,7 @@ def _system_prompt(case: CaseContext) -> str:
 
 def _greeting(case: CaseContext) -> str:
     return (
-        f"Hi {case.patient_name}, this is RadRelay calling on behalf of your "
+        f"Hi {case.patient_name}, this is Recall calling on behalf of your "
         "radiologist about a follow-up from your recent imaging. Do you have "
         "a couple of minutes?"
     )
